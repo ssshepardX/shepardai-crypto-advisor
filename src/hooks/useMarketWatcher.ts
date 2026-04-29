@@ -42,6 +42,12 @@ const DEFAULT_CONFIG: MarketWatcherConfig = {
   maxCoins: 200
 };
 
+declare global {
+  interface Window {
+    marketWatcherInterval?: ReturnType<typeof setInterval>;
+  }
+}
+
 export const useMarketWatcher = (config: Partial<MarketWatcherConfig> = {}) => {
   const finalConfig = { ...DEFAULT_CONFIG, ...config };
   const [isWatching, setIsWatching] = useState(false);
@@ -236,7 +242,7 @@ export const useMarketWatcher = (config: Partial<MarketWatcherConfig> = {}) => {
     const intervalId = setInterval(scanForPumps, finalConfig.interval * 1000);
 
     // Store interval ID for cleanup
-    (window as any).marketWatcherInterval = intervalId;
+    window.marketWatcherInterval = intervalId;
   }, [isWatching, scanForPumps, finalConfig.interval]);
 
   const stopWatching = useCallback(() => {
@@ -245,9 +251,9 @@ export const useMarketWatcher = (config: Partial<MarketWatcherConfig> = {}) => {
     setIsWatching(false);
     console.log('⏹️ Market watcher stopped');
 
-    if ((window as any).marketWatcherInterval) {
-      clearInterval((window as any).marketWatcherInterval);
-      delete (window as any).marketWatcherInterval;
+    if (window.marketWatcherInterval) {
+      clearInterval(window.marketWatcherInterval);
+      delete window.marketWatcherInterval;
     }
   }, [isWatching]);
 
@@ -296,8 +302,8 @@ export const useMarketWatcher = (config: Partial<MarketWatcherConfig> = {}) => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if ((window as any).marketWatcherInterval) {
-        clearInterval((window as any).marketWatcherInterval);
+      if (window.marketWatcherInterval) {
+        clearInterval(window.marketWatcherInterval);
       }
     };
   }, []);

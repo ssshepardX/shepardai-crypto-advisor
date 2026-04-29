@@ -9,6 +9,7 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HelmetProvider } from 'react-helmet-async';
 
 // Lazy load pages for better performance
 const Index = lazy(() => import("./pages/Index"));
@@ -59,22 +60,9 @@ const LoadingFallback = () => (
   </div>
 );
 
-import { HelmetProvider } from 'react-helmet-async';
-
-// Debug component to check environment variables
-const EnvDebug = () => {
-  console.log('Environment Variables Check:');
-  console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL);
-  console.log('VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Present' : 'Missing');
-  console.log('VITE_GEMINI_API_KEY:', import.meta.env.VITE_GEMINI_API_KEY ? 'Present' : 'Missing');
-
-  return null;
-};
-
 const App = () => (
   <ErrorBoundary>
     <HelmetProvider>
-      <EnvDebug />
       <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
