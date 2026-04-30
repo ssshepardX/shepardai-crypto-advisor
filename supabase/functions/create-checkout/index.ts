@@ -81,8 +81,8 @@ serve(async (req) => {
       body: JSON.stringify({
         product_id: productId,
         request_id: requestId,
+        units: 1,
         success_url: `${origin}/payment/success`,
-        cancel_url: `${origin}/payment/cancel`,
         customer: {
           email: user.email,
         },
@@ -96,7 +96,15 @@ serve(async (req) => {
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Creem checkout failed: ${response.status} ${text.slice(0, 180)}`);
+      console.error(`Creem checkout failed: ${response.status} ${text.slice(0, 500)}`);
+      return new Response(JSON.stringify({
+        error: "Creem checkout failed",
+        status: response.status,
+        detail: text.slice(0, 500),
+      }), {
+        status: response.status >= 400 && response.status < 500 ? 400 : 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const checkout = await response.json();

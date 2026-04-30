@@ -101,7 +101,16 @@ export async function createCheckout(plan: Exclude<PlanId, 'free'>, interval: Bi
     body: { plan, interval },
   });
 
-  if (error) throw new Error(error.message || 'Checkout could not be created');
+  if (error) {
+    const context = 'context' in error ? error.context : null;
+    if (context instanceof Response) {
+      const details = await context.json().catch(() => null);
+      if (details?.detail) throw new Error(`${details.error || 'Checkout could not be created'}: ${details.detail}`);
+      if (details?.error) throw new Error(details.error);
+    }
+    throw new Error(error.message || 'Checkout could not be created');
+  }
+  if (data?.detail) throw new Error(`${data.error || 'Checkout could not be created'}: ${data.detail}`);
   if (data?.error) throw new Error(data.error);
   return data as { checkout_url: string; id: string; product_id: string };
 }
