@@ -1,6 +1,7 @@
 // Ultra-Dark AI Market Analyst Dashboard with Glassmorphism
 
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,11 @@ import { getScanResults, getScannerStatus } from '@/services/scannerService';
 import ScanningCard from '@/components/ScanningCard';
 import { ScanData } from '@/services/scannerService';
 import { getAlerts, AlertData } from '@/services/alertsApi';
+import {
+  CoinAnalysis,
+  getRecentAnalyses,
+  scanMarket,
+} from '@/services/coinAnalysisService';
 
 // Mock data for demonstration - replace with real data later
 const mockAlerts = [
@@ -74,6 +80,7 @@ const DashboardPage = () => {
   const { session, loading } = useSession();
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
   const [scanResults, setScanResults] = useState<AlertData[]>([]);
+  const [recentAnalyses, setRecentAnalyses] = useState<CoinAnalysis[]>([]);
   const [scannerStatus, setScannerStatus] = useState({ isActive: false, lastScanTime: null, totalScans: 0 });
   const [isLoadingScans, setIsLoadingScans] = useState(false);
   const [systemStatus, setSystemStatus] = useState({
@@ -87,6 +94,7 @@ const DashboardPage = () => {
   useEffect(() => {
     // Initial fetch
     fetchScanResults();
+    fetchRecentAnalyses();
 
     // Set up periodic refresh every 30 seconds
     const interval = setInterval(() => {
@@ -113,6 +121,33 @@ const DashboardPage = () => {
       console.error('Failed to fetch alerts:', error);
       setScanResults([]);
       setScannerStatus({ isActive: false, lastScanTime: null, totalScans: 0 });
+    } finally {
+      setIsLoadingScans(false);
+    }
+  };
+
+  const fetchRecentAnalyses = async () => {
+    try {
+      const analyses = await getRecentAnalyses();
+      setRecentAnalyses(analyses);
+    } catch (error) {
+      console.error('Failed to fetch coin analyses:', error);
+      setRecentAnalyses([]);
+    }
+  };
+
+  const runMarketScan = async () => {
+    setIsLoadingScans(true);
+    try {
+      const analyses = await scanMarket();
+      setRecentAnalyses(analyses);
+      setScannerStatus({
+        isActive: true,
+        lastScanTime: new Date().toISOString(),
+        totalScans: analyses.length
+      });
+    } catch (error) {
+      console.error('Market scan failed:', error);
     } finally {
       setIsLoadingScans(false);
     }
@@ -203,6 +238,12 @@ const DashboardPage = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              <Button asChild size="sm" className="hidden sm:flex bg-cyan-500 hover:bg-cyan-600">
+                <Link to="/analysis">
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Coin Analyze
+                </Link>
+              </Button>
               <Settings className="h-5 w-5 text-slate-400 cursor-pointer hover:text-cyan-400 transition-colors" />
               <Bell className="h-5 w-5 text-slate-400 cursor-pointer hover:text-cyan-400 transition-colors" />
 </div>
@@ -312,6 +353,15 @@ const DashboardPage = () => {
             </div>
             <div className="flex gap-2">
               <Button
+                onClick={runMarketScan}
+                disabled={isLoadingScans}
+                variant="outline"
+                className="border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Run Market Scan
+              </Button>
+              <Button
                 onClick={fetchScanResults}
                 disabled={isLoadingScans}
                 className="bg-gradient-to-r from-cyan-500 to-sky-500 hover:from-cyan-600 hover:to-sky-600 text-white font-inter font-medium px-4 py-2 rounded-lg"
@@ -339,6 +389,70 @@ const DashboardPage = () => {
             </p>
           </div>
         </div>
+
+        {/* On-demand coin analysis entry */}
+        <div className="bg-slate-950/80 backdrop-blur-xl border border-white/10 rounded-xl p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+            <div>
+              <h3 className="text-lg font-inter font-semibold text-slate-200">
+                Coin Direction & Risk Analysis
+              </h3>
+              <p className="text-sm text-slate-400">
+                Select a coin, choose 5m/15m/30m/1h/4h and get deterministic technical + whale scoring with a short Gemini summary.
+              </p>
+            </div>
+            <Button asChild className="bg-cyan-500 hover:bg-cyan-600">
+              <Link to="/analysis">
+                <Brain className="h-4 w-4 mr-2" />
+                Open Analysis Terminal
+              </Link>
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+            {['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT'].map((symbol) => (
+              <Button
+                key={symbol}
+                asChild
+                variant="outline"
+                className="border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+              >
+                <Link to={`/analysis/${symbol}`}>
+                  {symbol.replace('USDT', '')}
+                </Link>
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {recentAnalyses.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-inter font-semibold text-slate-200">
+                Latest Coin Analyses
+              </h3>
+              <span className="text-sm text-slate-400 font-jetbrains">
+                Cached edge results
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recentAnalyses.slice(0, 6).map((analysis) => (
+                <Link key={analysis.id} to={`/analysis/${analysis.symbol}`}>
+                  <ScanningCard
+                    realData={{
+                      symbol: analysis.symbol,
+                      time: analysis.created_at,
+                      risk_score: analysis.risk_json.pump_dump_risk_score,
+                      price_change: analysis.risk_json.trend_score,
+                      volume_spike: analysis.indicator_json.volumeMultiplier,
+                      summary: analysis.ai_summary_json.summary_tr || 'Analysis complete'
+                    }}
+                  />
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Active AI Alerts from Supabase */}
         <div className="space-y-4">

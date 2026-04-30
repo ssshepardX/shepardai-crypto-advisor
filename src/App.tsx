@@ -15,6 +15,7 @@ import { HelmetProvider } from 'react-helmet-async';
 const Index = lazy(() => import("./pages/Index"));
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const CoinAnalysis = lazy(() => import("./pages/CoinAnalysis"));
 const ConfirmEmail = lazy(() => import("./pages/ConfirmEmail"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Pricing = lazy(() => import("./pages/Pricing"));
@@ -84,6 +85,8 @@ const App = () => (
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
                     <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/analysis" element={<CoinAnalysis />} />
+                    <Route path="/analysis/:symbol" element={<CoinAnalysis />} />
                   </Route>
 
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
