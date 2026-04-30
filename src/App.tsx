@@ -23,6 +23,7 @@ const About = lazy(() => import("./pages/About"));
 const Contact = lazy(() => import("./pages/Contact"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
+const PaymentResult = lazy(() => import("./pages/PaymentResult"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -87,6 +88,8 @@ const App = () => (
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/analysis" element={<CoinAnalysis />} />
                     <Route path="/analysis/:symbol" element={<CoinAnalysis />} />
+                    <Route path="/payment/success" element={<PaymentResult />} />
+                    <Route path="/payment/cancel" element={<PaymentResult />} />
                   </Route>
 
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

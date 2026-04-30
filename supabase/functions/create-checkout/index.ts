@@ -81,7 +81,8 @@ serve(async (req) => {
       body: JSON.stringify({
         product_id: productId,
         request_id: requestId,
-        success_url: `${origin}/dashboard?checkout=success`,
+        success_url: `${origin}/payment/success`,
+        cancel_url: `${origin}/payment/cancel`,
         customer: {
           email: user.email,
         },
