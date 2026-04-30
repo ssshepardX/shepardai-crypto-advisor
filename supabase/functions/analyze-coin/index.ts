@@ -68,9 +68,15 @@ type RiskSummary = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const geminiApiKey = Deno.env.get("GEMINI_API_KEY") || "";
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+function getGeminiApiKey(): string {
+  return Deno.env.get("GEMINI_API_KEY") ||
+    Deno.env.get("GOOGLE_API_KEY") ||
+    Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY") ||
+    "";
+}
 
 function clamp(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
@@ -339,6 +345,7 @@ function fallbackAiSummary(risk: RiskSummary) {
 }
 
 async function getAiSummary(symbol: string, timeframe: Timeframe, price: number, indicators: IndicatorSummary, risk: RiskSummary, social: Record<string, unknown>) {
+  const geminiApiKey = getGeminiApiKey();
   if (!geminiApiKey) return fallbackAiSummary(risk);
 
   const compactPayload = {
