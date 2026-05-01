@@ -1,5 +1,4 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 export type AppLanguage = 'tr' | 'en' | 'de' | 'es' | 'fr' | 'ar' | 'ru';
 
@@ -18,13 +17,32 @@ type LanguageContextValue = {
   languages: typeof languages;
   setLanguage: (language: AppLanguage) => void;
   translate: (text: string) => string;
-  translateMany: (texts: string[]) => Promise<void>;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 const storageKey = 'shepard-language';
-const cacheKey = 'shepard-translation-cache-v2';
+const dictionary: Partial<Record<AppLanguage, Record<string, string>>> = {
+  tr: {
+    'Market intelligence': 'Piyasa istihbaratı',
+    Dashboard: 'Panel',
+    'Market lab': 'Market lab',
+    Pricing: 'Fiyatlar',
+    'Log out': 'Çıkış',
+    'Log in': 'Giriş',
+    Admin: 'Admin',
+    Contact: 'İletişim',
+    Send: 'Gönder',
+    Sending: 'Gönderiliyor',
+    Refresh: 'Yenile',
+    Users: 'Kullanıcılar',
+    Private: 'Özel',
+    'Contact messages': 'İletişim mesajları',
+    'Contact form': 'İletişim formu',
+    'Payment complete': 'Ödeme tamamlandı',
+    'Payment canceled': 'Ödeme iptal edildi',
+  },
+};
 
 function detectLanguage(): AppLanguage {
   const saved = window.localStorage.getItem(storageKey) as AppLanguage | null;
@@ -33,17 +51,8 @@ function detectLanguage(): AppLanguage {
   return languages.some((item) => item.code === browser) ? browser : 'tr';
 }
 
-function readCache(): Record<string, string> {
-  try {
-    return JSON.parse(window.localStorage.getItem(cacheKey) || '{}');
-  } catch {
-    return {};
-  }
-}
-
 const LanguageProvider = ({ children }: { children: ReactNode }) => {
   const [language, setLanguageState] = useState<AppLanguage>(() => detectLanguage());
-  const [cache, setCache] = useState<Record<string, string>>(() => readCache());
 
   const setLanguage = useCallback((next: AppLanguage) => {
     setLanguageState(next);
@@ -57,33 +66,12 @@ const LanguageProvider = ({ children }: { children: ReactNode }) => {
     document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
   }, [language]);
 
-  const translateMany = useCallback(async (texts: string[]) => {
-    if (language === 'en') return;
-    const uniqueTexts = Array.from(new Set(texts.filter(Boolean)));
-    const missing = uniqueTexts.filter((text) => !cache[`${language}:${text}`]);
-    if (!missing.length) return;
-
-    const { data, error } = await supabase.functions.invoke('translate-text', {
-      method: 'POST',
-      body: { texts: missing, targetLanguage: language },
-    });
-    if (error || !Array.isArray(data?.translations)) return;
-
-    const nextCache = { ...cache };
-    missing.forEach((text, index) => {
-      nextCache[`${language}:${text}`] = String(data.translations[index] || text);
-    });
-    setCache(nextCache);
-    window.localStorage.setItem(cacheKey, JSON.stringify(nextCache));
-  }, [cache, language]);
-
   const value = useMemo<LanguageContextValue>(() => ({
     language,
     languages,
     setLanguage,
-    translate: (text: string) => language === 'en' ? text : cache[`${language}:${text}`] || text,
-    translateMany,
-  }), [cache, language, setLanguage, translateMany]);
+    translate: (text: string) => dictionary[language]?.[text] || text,
+  }), [language, setLanguage]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 };
@@ -95,10 +83,7 @@ export function useLanguage() {
 }
 
 export function Trans({ text }: { text: string }) {
-  const { translate, translateMany, language } = useLanguage();
-  useEffect(() => {
-    if (language !== 'en') void translateMany([text]);
-  }, [language, text, translateMany]);
+  const { translate } = useLanguage();
   return <>{translate(text)}</>;
 }
 

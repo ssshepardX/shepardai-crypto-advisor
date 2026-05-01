@@ -41,9 +41,7 @@ async function callAdmin<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-export const bootstrapAdmin = (token: string) => callAdmin<{ ok: true }>({ action: 'bootstrap-admin', token });
 export const getAdminData = () => callAdmin<{ users: AdminUser[]; messages: ContactMessage[] }>({ action: 'list' });
-export const setUserRole = (user_id: string, role: 'user' | 'admin') => callAdmin<{ ok: true }>({ action: 'set-role', user_id, role });
 export const setUserSubscription = (user_id: string, plan: 'free' | 'pro' | 'trader', days: number) =>
   callAdmin<{ ok: true }>({ action: 'set-subscription', user_id, plan, interval: 'monthly', days });
 export const setMessageStatus = (id: string, status: 'new' | 'read' | 'closed') =>

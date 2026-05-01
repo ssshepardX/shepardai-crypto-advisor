@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const bootstrapToken = Deno.env.get("ADMIN_BOOTSTRAP_TOKEN") || "";
+const adminEmail = (Deno.env.get("ADMIN_EMAIL") || "").toLowerCase();
 const supabase = createClient(supabaseUrl, serviceKey);
 
 function json(body: unknown, status = 200) {
@@ -25,9 +25,8 @@ async function getUser(req: Request) {
   return data.user || null;
 }
 
-async function isAdmin(userId: string) {
-  const { data } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-  return data?.role === "admin";
+function isAdminEmail(email?: string | null) {
+  return Boolean(adminEmail && email?.toLowerCase() === adminEmail);
 }
 
 async function listAdminData() {
@@ -77,21 +76,9 @@ serve(async (req) => {
   if (!user) return json({ error: "Unauthorized" }, 401);
   const body = await req.json().catch(() => ({}));
 
-  if (body.action === "bootstrap-admin") {
-    if (!bootstrapToken || body.token !== bootstrapToken) return json({ error: "Invalid bootstrap token" }, 403);
-    await supabase.from("profiles").upsert({ id: user.id, role: "admin", last_seen_at: new Date().toISOString() });
-    return json({ ok: true });
-  }
-
-  if (!(await isAdmin(user.id))) return json({ error: "Admin required" }, 403);
+  if (!isAdminEmail(user.email)) return json({ error: "Admin required" }, 403);
 
   if (body.action === "list") return json(await listAdminData());
-
-  if (body.action === "set-role") {
-    if (!body.user_id || !["user", "admin"].includes(body.role)) return json({ error: "Invalid input" }, 400);
-    await supabase.from("profiles").upsert({ id: body.user_id, role: body.role });
-    return json({ ok: true });
-  }
 
   if (body.action === "set-subscription") {
     if (!body.user_id || !["free", "pro", "trader"].includes(body.plan)) return json({ error: "Invalid input" }, 400);

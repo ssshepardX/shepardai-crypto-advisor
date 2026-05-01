@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BarChart3, Brain, CreditCard, LayoutDashboard, LogOut, Shield } from 'lucide-react';
+import { BarChart3, Brain, CreditCard, LayoutDashboard, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -57,14 +57,6 @@ const AppShell = ({ title, subtitle, children, action }: AppShellProps) => {
                 <Trans text="Pricing" />
               </Link>
             </Button>
-            {session && (
-              <Button asChild variant="ghost" size="sm" className="text-slate-300 hover:text-white">
-                <Link to="/admin">
-                  <Shield className="mr-2 h-4 w-4" />
-                  <Trans text="Admin" />
-                </Link>
-              </Button>
-            )}
           </div>
 
           <div className="flex items-center gap-2">
