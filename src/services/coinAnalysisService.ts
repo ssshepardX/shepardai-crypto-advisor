@@ -160,11 +160,12 @@ export class CoinAnalysisError extends Error {
 export async function analyzeCoin(
   symbol: string,
   timeframe: AnalysisTimeframe,
-  force = false
+  force = false,
+  language = 'tr'
 ): Promise<CoinAnalysis> {
   const { data, error } = await supabase.functions.invoke('analyze-coin', {
     method: 'POST',
-    body: { symbol, timeframe, force },
+    body: { symbol, timeframe, force, language },
   });
 
   if (error) {

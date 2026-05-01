@@ -14,7 +14,9 @@ const GEMINI_MODELS = [
   "gemini-2.0-flash-lite",
 ] as const;
 const OPENROUTER_MODEL = "openrouter/free";
+const SUPPORTED_LANGUAGES = ["tr", "en", "de", "es", "fr", "ar", "ru"] as const;
 type Timeframe = typeof TIMEFRAMES[number];
+type OutputLanguage = typeof SUPPORTED_LANGUAGES[number];
 
 type Kline = {
   openTime: number;
@@ -160,6 +162,10 @@ function normalizePlan(plan: string | null | undefined): PlanId {
   return "free";
 }
 
+function normalizeLanguage(value: unknown): OutputLanguage {
+  return SUPPORTED_LANGUAGES.includes(value as OutputLanguage) ? value as OutputLanguage : "tr";
+}
+
 async function getAuthContext(req: Request): Promise<AuthContext> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -208,7 +214,7 @@ async function getTodayUsage(userId: string): Promise<{ ai_analysis_count: numbe
 async function assertCanGenerateAi(auth: AuthContext) {
   const usage = await getTodayUsage(auth.userId);
   if (usage.ai_analysis_count >= auth.entitlement.aiDailyLimit) {
-    throw new ApiError(403, "AI_LIMIT_REACHED", "Gunluk AI analiz limitin doldu. Devam etmek icin plani yukselt.", {
+    throw new ApiError(403, "AI_LIMIT_REACHED", "Daily analysis limit reached. Upgrade to run more checks.", {
       plan: auth.plan,
       used: usage.ai_analysis_count,
       limit: auth.entitlement.aiDailyLimit,
@@ -776,12 +782,16 @@ async function fetchSocialSummary(symbol: string) {
   }
 }
 
-function fallbackAiSummary(cause: CauseSummary, risk: RiskSummary, reason = "missing_ai_api_key", detail = "") {
+function fallbackAiSummary(cause: CauseSummary, risk: RiskSummary, language: OutputLanguage, reason = "missing_ai_api_key", detail = "") {
   const riskLevel = risk.pump_dump_risk_score > 70 ? "High" : risk.pump_dump_risk_score > 45 ? "Moderate" : "Low";
-  const reasonText = reason === "ai_provider_request_failed"
-    ? "AI provider cagrilari basarisiz oldu; hareket kaynagi skorlariyla fallback ozeti kullanildi."
-    : "AI API key Edge Function runtime icinde okunamadi; hareket kaynagi skorlariyla fallback ozeti kullanildi.";
+  const reasonText = language === "tr"
+    ? "Veriler hareketin kaynağına dair net bir baskın sinyal göstermiyor. Büyük işlem, likidite ve hacim skorları birlikte izlenmeli."
+    : "The data does not show one clear dominant cause. Large trades, liquidity, and volume scores should be read together.";
+  const notice = language === "tr"
+    ? "Bu finansal tavsiye değildir; yalnızca piyasa hareketi kaynak analizidir."
+    : "This is not financial advice. It is only a market movement source analysis.";
   return {
+    language,
     likely_cause: cause.likely_cause,
     manipulation_risk: riskLevel,
     whale_probability: cause.movement_cause_score.whale,
@@ -789,7 +799,7 @@ function fallbackAiSummary(cause: CauseSummary, risk: RiskSummary, reason = "mis
     confidence: cause.confidence_score,
     summary_tr: reasonText,
     watch_points: cause.risk_labels.slice(0, 3),
-    not_advice_notice: "Bu finansal tavsiye degildir; yalnizca piyasa hareketi kaynak analizidir.",
+    not_advice_notice: notice,
     direction_bias: "neutral",
     continuation_probability: cause.early_warning_score,
     risk_level: riskLevel,
@@ -819,10 +829,11 @@ async function getAiSummary(
   microstructure: Record<string, unknown>,
   social: Record<string, unknown>,
   news: Record<string, unknown>,
+  language: OutputLanguage,
 ) {
   const geminiApiKey = getGeminiApiKey();
   const openRouterApiKey = getOpenRouterApiKey();
-  if (!geminiApiKey && !openRouterApiKey) return fallbackAiSummary(cause, risk);
+  if (!geminiApiKey && !openRouterApiKey) return fallbackAiSummary(cause, risk, language);
 
   const compactPayload = {
     symbol,
@@ -847,7 +858,7 @@ async function getAiSummary(
     news,
   };
 
-  const prompt = `Kisa ve temkinli bir Turkce kripto hareket kaynagi analizi uret. Fiyat yonu, al/sat, entry/exit veya kesin tahmin yazma. Kararlar deterministik skorlardan gelir; sadece acikla. JSON disinda metin yazma.\n${JSON.stringify(compactPayload)}\nOutput schema: {"likely_cause":"organic_demand|whale_push|thin_liquidity_move|fomo_trap|fraud_pump_risk|news_social_catalyst|balanced_market","manipulation_risk":"Low|Moderate|High|Critical","whale_probability":0-100,"catalyst_summary_tr":"max 2 cumle","confidence":0-100,"watch_points":["max 3 kisa madde"],"not_advice_notice":"Bu finansal tavsiye degildir; yalnizca piyasa hareketi kaynak analizidir."}`;
+  const prompt = `Write a short and plain market movement source analysis in language code ${language}. Audience: a regular app user, not a professional trader. Use simple words. Do not mention model/provider/cache/fallback. Do not write price direction, buy/sell, entry/exit, or certainty. Decisions already come from deterministic scores; explain them only. Return JSON only.\n${JSON.stringify(compactPayload)}\nOutput schema: {"likely_cause":"organic_demand|whale_push|thin_liquidity_move|fomo_trap|fraud_pump_risk|news_social_catalyst|balanced_market","manipulation_risk":"Low|Moderate|High|Critical","whale_probability":0-100,"catalyst_summary_tr":"max 2 short sentences","confidence":0-100,"watch_points":["max 3 short items"],"not_advice_notice":"one short disclaimer in target language"}`;
 
   const errors: string[] = [];
   for (const model of geminiApiKey ? GEMINI_MODELS : []) {
@@ -871,8 +882,9 @@ async function getAiSummary(
       const data = await response.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
       return {
-        ...fallbackAiSummary(cause, risk),
+        ...fallbackAiSummary(cause, risk, language),
         ...parseJsonObject(text),
+        language,
         source: model,
         fallback_reason: null,
         provider_error: "",
@@ -892,7 +904,7 @@ async function getAiSummary(
           "Authorization": `Bearer ${openRouterApiKey}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://wwdnuxpzsmdbeffhdsoy.supabase.co",
-          "X-OpenRouter-Title": "Crypto BuySell AI Analyst",
+          "X-OpenRouter-Title": "Shepard Advisor",
         },
         body: JSON.stringify({
           model: OPENROUTER_MODEL,
@@ -917,8 +929,9 @@ async function getAiSummary(
       const data = await response.json();
       const text = data.choices?.[0]?.message?.content || "{}";
       return {
-        ...fallbackAiSummary(cause, risk),
+        ...fallbackAiSummary(cause, risk, language),
         ...parseJsonObject(text),
+        language,
         source: data.model || OPENROUTER_MODEL,
         fallback_reason: null,
         provider_error: "",
@@ -930,7 +943,7 @@ async function getAiSummary(
     }
   }
 
-  return fallbackAiSummary(cause, risk, "ai_provider_request_failed", errors.join(" | ").slice(0, 600));
+  return fallbackAiSummary(cause, risk, language, "ai_provider_request_failed", errors.join(" | ").slice(0, 600));
 }
 
 async function readCached(symbol: string, timeframe: Timeframe) {
@@ -946,7 +959,7 @@ async function readCached(symbol: string, timeframe: Timeframe) {
   return data;
 }
 
-async function readRecentAiSummary(symbol: string, timeframe: Timeframe) {
+async function readRecentAiSummary(symbol: string, timeframe: Timeframe, language: OutputLanguage) {
   const minCreatedAt = new Date(Date.now() - ttlMinutes(timeframe) * 60 * 1000).toISOString();
   const { data } = await supabase
     .from("coin_analyses")
@@ -957,15 +970,16 @@ async function readRecentAiSummary(symbol: string, timeframe: Timeframe) {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return data?.ai_summary_json || null;
+  const summary = data?.ai_summary_json;
+  return summary?.language === language ? summary : null;
 }
 
-async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: AuthContext, force = false) {
+async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: AuthContext, force = false, language: OutputLanguage = "tr") {
   const symbol = normalizeSymbol(symbolInput);
   const timeframe = TIMEFRAMES.includes(timeframeInput as Timeframe) ? timeframeInput as Timeframe : "15m";
   if (!force) {
     const cached = await readCached(symbol, timeframe);
-    if (cached?.cause_json && Object.keys(cached.cause_json).length > 0) {
+    if (cached?.cause_json && Object.keys(cached.cause_json).length > 0 && cached.ai_summary_json?.language === language) {
       return { ...cached, cache_hit: true, usage_counted: false };
     }
   }
@@ -1001,11 +1015,11 @@ async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: Au
       news: news.status,
     },
   };
-  const recentAiSummary = await readRecentAiSummary(symbol, timeframe);
+  const recentAiSummary = await readRecentAiSummary(symbol, timeframe, language);
   if (!recentAiSummary) {
     await assertCanGenerateAi(auth);
   }
-  const aiSummary = recentAiSummary || await getAiSummary(symbol, timeframe, price, indicators, risk, cause, microstructure, social, news);
+  const aiSummary = recentAiSummary || await getAiSummary(symbol, timeframe, price, indicators, risk, cause, microstructure, social, news, language);
   if (!recentAiSummary) {
     await incrementUsage(auth.userId, "ai_analysis_count");
   }
@@ -1070,7 +1084,7 @@ async function scanMarket(auth: AuthContext) {
   const analyzed = [];
   for (const symbol of symbols) {
     try {
-      const result = await analyzeCoin(symbol, "15m", auth, false);
+      const result = await analyzeCoin(symbol, "15m", auth, false, "tr");
       const risk = result.risk_json as RiskSummary;
       const cause = result.cause_json as CauseSummary | undefined;
       if (
@@ -1115,7 +1129,7 @@ serve(async (req) => {
       });
     }
 
-    const analysis = await analyzeCoin(body.symbol || "BTCUSDT", body.timeframe || "15m", auth, Boolean(body.force));
+    const analysis = await analyzeCoin(body.symbol || "BTCUSDT", body.timeframe || "15m", auth, Boolean(body.force), normalizeLanguage(body.language));
     return new Response(JSON.stringify({ analysis }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, BrowserRouter } from "react-router-dom";
 import { SessionContextProvider } from "./contexts/SessionContext";
+import LanguageProvider from "./contexts/LanguageContext";
 import { ThemeProvider } from "./components/ThemeProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -72,8 +73,9 @@ const App = () => (
         <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
           <BrowserRouter>
             <SessionContextProvider>
-              <Suspense fallback={<LoadingFallback />}>
-                <Routes>
+              <LanguageProvider>
+                <Suspense fallback={<LoadingFallback />}>
+                  <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/confirm-email" element={<ConfirmEmail />} />
@@ -94,8 +96,9 @@ const App = () => (
 
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Suspense>
+                  </Routes>
+                </Suspense>
+              </LanguageProvider>
             </SessionContextProvider>
           </BrowserRouter>
         </ThemeProvider>

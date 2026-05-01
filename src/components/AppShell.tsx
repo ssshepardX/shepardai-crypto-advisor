@@ -4,6 +4,7 @@ import { BarChart3, Brain, CreditCard, LayoutDashboard, LogOut } from 'lucide-re
 import { Button } from '@/components/ui/button';
 import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/integrations/supabase/client';
+import { AppLanguage, Trans, useLanguage } from '@/contexts/LanguageContext';
 
 interface AppShellProps {
   title: string;
@@ -14,6 +15,7 @@ interface AppShellProps {
 
 const AppShell = ({ title, subtitle, children, action }: AppShellProps) => {
   const { session } = useSession();
+  const { language, languages, setLanguage } = useLanguage();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -32,7 +34,7 @@ const AppShell = ({ title, subtitle, children, action }: AppShellProps) => {
             </div>
             <div>
               <div className="font-semibold tracking-tight">Shepard Advisor</div>
-              <div className="text-xs text-slate-500">Market Intelligence</div>
+              <div className="text-xs text-slate-500"><Trans text="Market intelligence" /></div>
             </div>
           </Link>
 
@@ -40,33 +42,43 @@ const AppShell = ({ title, subtitle, children, action }: AppShellProps) => {
             <Button asChild variant="ghost" size="sm" className="text-slate-300 hover:text-white">
               <Link to="/dashboard">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
-                Dashboard
+                <Trans text="Dashboard" />
               </Link>
             </Button>
             <Button asChild variant="ghost" size="sm" className="text-slate-300 hover:text-white">
               <Link to="/analysis">
                 <BarChart3 className="mr-2 h-4 w-4" />
-                Market Lab
+                <Trans text="Market lab" />
               </Link>
             </Button>
             <Button asChild variant="ghost" size="sm" className="text-slate-300 hover:text-white">
               <Link to="/pricing">
                 <CreditCard className="mr-2 h-4 w-4" />
-                Pricing
+                <Trans text="Pricing" />
               </Link>
             </Button>
           </div>
 
           <div className="flex items-center gap-2">
             {action}
+            <select
+              value={language}
+              onChange={(event) => setLanguage(event.target.value as AppLanguage)}
+              className="h-9 rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-200 outline-none"
+              aria-label="Language"
+            >
+              {languages.map((item) => (
+                <option key={item.code} value={item.code}>{item.label}</option>
+              ))}
+            </select>
             {session ? (
               <Button onClick={handleLogout} variant="outline" size="sm" className="border-slate-700 bg-slate-900">
                 <LogOut className="mr-2 h-4 w-4" />
-                Logout
+                <Trans text="Log out" />
               </Button>
             ) : (
               <Button asChild size="sm" className="bg-cyan-500 hover:bg-cyan-600">
-                <Link to="/login">Login</Link>
+                <Link to="/login"><Trans text="Log in" /></Link>
               </Button>
             )}
           </div>
@@ -76,8 +88,8 @@ const AppShell = ({ title, subtitle, children, action }: AppShellProps) => {
       <main className="relative z-10 mx-auto max-w-7xl px-4 py-6">
         <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
-            {subtitle && <p className="mt-1 text-sm text-slate-400">{subtitle}</p>}
+            <h1 className="text-2xl font-semibold tracking-tight text-white"><Trans text={title} /></h1>
+            {subtitle && <p className="mt-1 text-sm text-slate-400"><Trans text={subtitle} /></p>}
           </div>
         </div>
         {children}

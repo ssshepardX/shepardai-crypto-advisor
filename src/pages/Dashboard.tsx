@@ -16,6 +16,7 @@ import { useSession } from '@/contexts/SessionContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Trans } from '@/contexts/LanguageContext';
 
 const starterPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT'];
 
@@ -99,11 +100,11 @@ const DashboardPage = () => {
   return (
     <AppShell
       title={`Dashboard${session?.user?.email ? ` - ${session.user.email.split('@')[0]}` : ''}`}
-      subtitle="Abonelik, kullanim limitleri, hareket kaynagi ve manipülasyon analizi"
+      subtitle="See account limits and recent movement checks."
       action={
         <Button onClick={loadDashboard} disabled={isLoading} variant="outline" className="border-slate-700 bg-slate-900">
           <RefreshCw className="mr-2 h-4 w-4" />
-          Yenile
+          <Trans text="Refresh" />
         </Button>
       }
     >
@@ -115,17 +116,17 @@ const DashboardPage = () => {
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard icon={ShieldAlert} label="Plan" value={subscription?.plan.toUpperCase() || 'FREE'} />
-        <MetricCard icon={Brain} label="AI Kullanim" value={`${usage?.ai_analysis_count || 0}/${entitlement.aiDailyLimit}`} />
-        <MetricCard icon={Activity} label="Scanner" value={entitlement.canRunScanner ? 'Trigger Acik' : `${entitlement.scannerDelayMinutes} dk gecikme`} />
-        <MetricCard icon={Clock} label="Yenileme" value={subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString('tr-TR') : '-'} />
+        <MetricCard icon={Brain} label="Daily checks" value={`${usage?.ai_analysis_count || 0}/${entitlement.aiDailyLimit}`} />
+        <MetricCard icon={Activity} label="Scanner" value={entitlement.canRunScanner ? 'Enabled' : `${entitlement.scannerDelayMinutes} min delay`} />
+        <MetricCard icon={Clock} label="Renewal" value={subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString('tr-TR') : '-'} />
       </div>
 
       <Card className="border-slate-800 bg-slate-900">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
           <div>
-            <CardTitle className="text-base">Movement Scanner</CardTitle>
+            <CardTitle className="text-base"><Trans text="Movement scanner" /></CardTitle>
             <p className="mt-1 text-sm text-slate-400">
-              Free kullanicilar gecikmeli sonuc gorur. Manuel scanner hareket sebebi, whale izi ve manipülasyon riskini siniflandirir.
+              <Trans text="Checks recent market moves and classifies the likely cause." />
             </p>
           </div>
           <Button onClick={runMarketScan} disabled={isLoading || !entitlement.canRunScanner} className="bg-cyan-500 hover:bg-cyan-600">
@@ -136,7 +137,7 @@ const DashboardPage = () => {
         {!entitlement.canRunScanner && (
           <CardContent>
             <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-200">
-              Manuel scanner icin Trader plan gerekir. Mevcut panel yine cache ve otomatik scanner sonuclarini gosterir.
+              <Trans text="Manual scanning is available on the Trader plan. Cached results remain visible." />
             </div>
           </CardContent>
         )}
@@ -145,8 +146,8 @@ const DashboardPage = () => {
       <Card className="border-slate-800 bg-slate-900">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
           <div>
-            <CardTitle className="text-base">Market Lab</CardTitle>
-            <p className="mt-1 text-sm text-slate-400">Canli chart, teknik onay, whale izi ve hareket kaynagi degerlendirmesi.</p>
+            <CardTitle className="text-base"><Trans text="Market lab" /></CardTitle>
+            <p className="mt-1 text-sm text-slate-400"><Trans text="Open a pair and inspect the likely cause behind its move." /></p>
           </div>
           <Button asChild className="bg-cyan-500 hover:bg-cyan-600">
             <Link to="/analysis">
@@ -169,7 +170,7 @@ const DashboardPage = () => {
       {recentAnalyses.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-100">Son Hareket Teşhisleri</h2>
+            <h2 className="text-lg font-semibold text-slate-100"><Trans text="Recent movement checks" /></h2>
             <Badge className="bg-slate-800 text-slate-300">Cause cache</Badge>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -196,7 +197,7 @@ const DashboardPage = () => {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-100">Scanner Hareketleri</h2>
+          <h2 className="text-lg font-semibold text-slate-100"><Trans text="Scanner results" /></h2>
           <Badge className="bg-slate-800 text-slate-300">{alerts.length} sonuc</Badge>
         </div>
         {alerts.length > 0 ? (
@@ -218,7 +219,7 @@ const DashboardPage = () => {
           </div>
         ) : (
           <div className="rounded-md border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-400">
-            Henuz gosterilecek scanner sonucu yok.
+            <Trans text="No scanner result yet." />
           </div>
         )}
       </section>
@@ -230,7 +231,7 @@ const MetricCard = ({ icon: Icon, label, value }: { icon: React.ElementType; lab
   <Card className="border-slate-800 bg-slate-900">
     <CardContent className="flex items-center justify-between p-4">
       <div>
-        <p className="text-xs text-slate-500">{label}</p>
+        <p className="text-xs text-slate-500"><Trans text={label} /></p>
         <p className="mt-1 text-xl font-semibold text-slate-100">{value}</p>
       </div>
       <Icon className="h-6 w-6 text-cyan-400" />

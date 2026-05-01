@@ -32,6 +32,7 @@ import {
   UserSubscription,
   UserUsageDaily,
 } from '@/services/subscriptionService';
+import { Trans, useLanguage } from '@/contexts/LanguageContext';
 
 const TIMEFRAMES: AnalysisTimeframe[] = ['5m', '15m', '30m', '1h', '4h'];
 
@@ -59,6 +60,7 @@ const CoinAnalysis = () => {
   const [usage, setUsage] = useState<UserUsageDaily | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { language } = useLanguage();
 
   useEffect(() => {
     let cancelled = false;
@@ -89,13 +91,13 @@ const CoinAnalysis = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await analyzeCoin(symbol, timeframe, force);
+      const result = await analyzeCoin(symbol, timeframe, force, language);
       setAnalysis(result);
       const today = await getTodayUsage();
       setUsage(today);
     } catch (err) {
       if (err instanceof CoinAnalysisError && err.code === 'AI_LIMIT_REACHED') {
-        setError(`Gunluk AI analiz limitin doldu (${err.used}/${err.limit}). Devam etmek icin plani yukselt.`);
+        setError(`Daily analysis limit reached (${err.used}/${err.limit}).`);
       } else {
         setError(err instanceof Error ? err.message : 'Analiz calistirilamadi');
       }
@@ -111,9 +113,9 @@ const CoinAnalysis = () => {
 
   return (
     <AppShell
-      title="Coin Analiz Terminali"
-      subtitle="Canli chart, teknik onay, whale izi ve hareket kaynagi degerlendirmesi"
-      action={<Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">AI Supervisor</Badge>}
+      title="Movement analysis"
+      subtitle="Find the likely reason behind a sudden market move."
+      action={<Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300"><Trans text="Supervisor" /></Badge>}
     >
       <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
         <section className="space-y-4">
@@ -121,12 +123,12 @@ const CoinAnalysis = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <CandlestickChart className="h-4 w-4 text-cyan-400" />
-                Analiz Secimi
+                <Trans text="Analysis setup" />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label className="text-xs text-slate-400">Parite</label>
+                <label className="text-xs text-slate-400"><Trans text="Pair" /></label>
                 <Input
                   value={symbol}
                   onChange={(event) => setSymbol(event.target.value.toUpperCase())}
@@ -150,7 +152,7 @@ const CoinAnalysis = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs text-slate-400">Zaman araligi</label>
+                <label className="text-xs text-slate-400"><Trans text="Timeframe" /></label>
                 <div className="grid grid-cols-5 gap-2">
                   {TIMEFRAMES.map((item) => (
                     <Button
@@ -170,11 +172,11 @@ const CoinAnalysis = () => {
               <div className="grid grid-cols-2 gap-2">
                 <Button onClick={() => runAnalysis(false)} disabled={isLoading}>
                   <Brain className="mr-2 h-4 w-4" />
-                  Degerlendir
+                  <Trans text="Analyze" />
                 </Button>
                 <Button onClick={() => runAnalysis(true)} disabled={isLoading} variant="outline">
                   <RefreshCw className={cn('mr-2 h-4 w-4', isLoading && 'animate-spin')} />
-                  Tazele
+                  <Trans text="Refresh" />
                 </Button>
               </div>
 
@@ -194,7 +196,7 @@ const CoinAnalysis = () => {
               <CardContent className="space-y-3">
                 <div className="text-3xl font-bold">{formatUsd(Number(analysis.price))}</div>
                 <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">
-                  Plan: <span className="text-slate-200">{subscription?.plan.toUpperCase() || 'FREE'}</span> - AI kullanim: {usage?.ai_analysis_count || 0}/{entitlement.aiDailyLimit}
+                  <Trans text="Plan" />: <span className="text-slate-200">{subscription?.plan.toUpperCase() || 'FREE'}</span> - <Trans text="Daily analysis" />: {usage?.ai_analysis_count || 0}/{entitlement.aiDailyLimit}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {risk?.labels.map((label) => (
@@ -204,7 +206,7 @@ const CoinAnalysis = () => {
                   ))}
                 </div>
                 <p className="text-xs text-slate-500">
-                  {analysis.cache_hit ? 'Cache kullanildi' : analysis.ai_cache_hit ? 'AI cache kullanildi' : 'Yeni analiz olusturuldu'} - {new Date(analysis.created_at).toLocaleString()}
+                  <Trans text={analysis.cache_hit ? 'Saved result' : analysis.ai_cache_hit ? 'Saved summary' : 'New check'} /> - {new Date(analysis.created_at).toLocaleString()}
                 </p>
               </CardContent>
             </Card>
@@ -216,11 +218,11 @@ const CoinAnalysis = () => {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
                 <BarChart3 className="h-4 w-4 text-cyan-400" />
-                Piyasa Chart
+                <Trans text="Market chart" />
               </CardTitle>
               {aiSummary && (
                 <Badge className="bg-slate-800 text-slate-200">
-                  Kaynak: {analysis?.cause_json?.likely_cause || aiSummary.likely_cause || 'balanced_market'}
+                  <Trans text="Cause" />: {analysis?.cause_json?.likely_cause || aiSummary.likely_cause || 'balanced_market'}
                 </Badge>
               )}
             </CardHeader>
@@ -234,9 +236,9 @@ const CoinAnalysis = () => {
           {analysis && risk && indicators && aiSummary && (
             <>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <MetricCard icon={TrendingUp} label="Hareket Sebebi" value={analysis.cause_json?.movement_cause_score.technical_breakout ?? risk.trend_score} />
-                <MetricCard icon={Activity} label="Güven Skoru" value={analysis.cause_json?.confidence_score ?? 0} />
-                <MetricCard icon={ShieldAlert} label="Manipülasyon Riski" value={analysis.cause_json?.early_warning_score ?? risk.pump_dump_risk_score} danger />
+                <MetricCard icon={TrendingUp} label="Cause signal" value={analysis.cause_json?.movement_cause_score.technical_breakout ?? risk.trend_score} />
+                <MetricCard icon={Activity} label="Confidence" value={analysis.cause_json?.confidence_score ?? 0} />
+                <MetricCard icon={ShieldAlert} label="Manipulation risk" value={analysis.cause_json?.early_warning_score ?? risk.pump_dump_risk_score} danger />
               </div>
 
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -244,7 +246,7 @@ const CoinAnalysis = () => {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
                       <AlertTriangle className="h-4 w-4 text-amber-400" />
-                      Risk ve Whale Kontrolu
+                      <Trans text="Risk and whale check" />
                     </CardTitle>
                   </CardHeader>
                   {entitlement.canViewAdvancedRisk ? (
@@ -261,7 +263,7 @@ const CoinAnalysis = () => {
                   ) : (
                     <CardContent>
                       <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
-                        Advanced risk ve whale paneli Pro/Trader planlarinda aciktir.
+                        <Trans text="Advanced risk and whale details are available on Pro and Trader plans." />
                       </div>
                     </CardContent>
                   )}
@@ -271,7 +273,7 @@ const CoinAnalysis = () => {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
                       <Waves className="h-4 w-4 text-cyan-400" />
-                      Teknik Ozet
+                      <Trans text="Technical summary" />
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="grid grid-cols-2 gap-3 text-sm">
@@ -290,12 +292,12 @@ const CoinAnalysis = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <AlertTriangle className="h-4 w-4 text-cyan-400" />
-                    Hareket Sebebi
+                    <Trans text="Movement cause" />
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="rounded-md border border-slate-800 bg-slate-950 p-4">
-                    <div className="text-xs text-slate-500">Likely Cause</div>
+                    <div className="text-xs text-slate-500"><Trans text="Likely cause" /></div>
                     <div className="mt-1 text-xl font-semibold text-slate-100">{analysis.cause_json?.likely_cause || aiSummary.likely_cause || 'balanced_market'}</div>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
@@ -304,7 +306,7 @@ const CoinAnalysis = () => {
                     <InfoLine label="Fraud/Pump" value={`${analysis.cause_json?.movement_cause_score.fraud_pump ?? 0}/100`} />
                     <InfoLine label="News/Social" value={`${analysis.cause_json?.movement_cause_score.news_social ?? 0}/100`} />
                     <InfoLine label="Low Liquidity" value={`${analysis.cause_json?.movement_cause_score.low_liquidity ?? 0}/100`} />
-                    <InfoLine label="Teknik Onay" value={`${analysis.cause_json?.movement_cause_score.technical_breakout ?? 0}/100`} />
+                    <InfoLine label="Technical support" value={`${analysis.cause_json?.movement_cause_score.technical_breakout ?? 0}/100`} />
                   </div>
                 </CardContent>
               </Card>
@@ -313,7 +315,7 @@ const CoinAnalysis = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Waves className="h-4 w-4 text-emerald-400" />
-                    News / Social Katalizör
+                    <Trans text="News and social catalyst" />
                   </CardTitle>
                 </CardHeader>
                 {entitlement.canViewAdvancedRisk ? (
@@ -323,13 +325,13 @@ const CoinAnalysis = () => {
                     <InfoLine label="Reddit Mentions" value={String(analysis.social_json?.mention_delta ?? 0)} />
                     <InfoLine label="Social Confidence" value={`${analysis.social_json?.confidence ?? 0}/100`} />
                     <div className="col-span-2 rounded-md border border-slate-800 bg-slate-950 p-3 md:col-span-4">
-                      <div className="text-xs text-slate-500">Catalyst Terms</div>
+                      <div className="text-xs text-slate-500"><Trans text="Catalyst terms" /></div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {[...(analysis.news_json?.top_catalyst_terms || []), ...(analysis.social_json?.top_catalyst_terms || [])].slice(0, 8).map((term) => (
                           <Badge key={term} variant="outline" className="border-slate-700 text-slate-300">{term}</Badge>
                         ))}
                         {!(analysis.news_json?.top_catalyst_terms?.length || analysis.social_json?.top_catalyst_terms?.length) && (
-                          <span className="text-sm text-slate-500">Katalizör terim bulunamadi veya provider konfigure degil.</span>
+                          <span className="text-sm text-slate-500"><Trans text="No catalyst term found yet." /></span>
                         )}
                       </div>
                     </div>
@@ -337,7 +339,7 @@ const CoinAnalysis = () => {
                 ) : (
                   <CardContent>
                     <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
-                      News/social source breakdown Pro/Trader planlarinda aciktir.
+                      <Trans text="News and social details are available on Pro and Trader plans." />
                     </div>
                   </CardContent>
                 )}
@@ -347,17 +349,17 @@ const CoinAnalysis = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Brain className="h-4 w-4 text-cyan-300" />
-                    AI Supervisor
+                    <Trans text="Summary" />
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-lg leading-relaxed text-slate-100">{aiSummary.catalyst_summary_tr || aiSummary.summary_tr}</p>
                   <div className="flex flex-wrap gap-2">
                     <Badge className={cn('bg-slate-800', scoreColor(aiSummary.whale_probability ?? analysis.cause_json?.movement_cause_score.whale ?? 0))}>
-                      Whale izi: {aiSummary.whale_probability ?? analysis.cause_json?.movement_cause_score.whale ?? 0}%
+                      <Trans text="Whale trace" />: {aiSummary.whale_probability ?? analysis.cause_json?.movement_cause_score.whale ?? 0}%
                     </Badge>
-                    <Badge className="bg-slate-800">Manipülasyon: {aiSummary.manipulation_risk || aiSummary.risk_level}</Badge>
-                    <Badge className="bg-slate-800">Güven: {aiSummary.confidence ?? analysis.cause_json?.confidence_score ?? 0}/100</Badge>
+                    <Badge className="bg-slate-800"><Trans text="Manipulation" />: {aiSummary.manipulation_risk || aiSummary.risk_level}</Badge>
+                    <Badge className="bg-slate-800"><Trans text="Confidence" />: {aiSummary.confidence ?? analysis.cause_json?.confidence_score ?? 0}/100</Badge>
                   </div>
                   <div className="grid gap-2 md:grid-cols-3">
                     {aiSummary.watch_points.map((point) => (
@@ -391,7 +393,7 @@ const MetricCard = ({
   <Card className="border-slate-800 bg-slate-900">
     <CardContent className="flex items-center justify-between p-5">
       <div>
-        <p className="text-sm text-slate-400">{label}</p>
+        <p className="text-sm text-slate-400"><Trans text={label} /></p>
         <p className={cn('text-3xl font-bold', danger ? scoreColor(value) : 'text-cyan-300')}>{value}</p>
       </div>
       <Icon className="h-8 w-8 text-slate-600" />
@@ -401,7 +403,7 @@ const MetricCard = ({
 
 const InfoLine = ({ label, value }: { label: string; value: string }) => (
   <div className="rounded-md border border-slate-800 bg-slate-950 p-3">
-    <div className="text-xs text-slate-500">{label}</div>
+    <div className="text-xs text-slate-500"><Trans text={label} /></div>
     <div className="font-mono text-slate-200">{value}</div>
   </div>
 );

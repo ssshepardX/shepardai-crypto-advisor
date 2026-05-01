@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useSession } from '@/contexts/SessionContext';
+import { Trans } from '@/contexts/LanguageContext';
 import { BillingInterval, createCheckout, PlanId } from '@/services/subscriptionService';
 
 const intervalLabels: Record<BillingInterval, string> = {
-  monthly: 'Aylik',
-  quarterly: '3 Aylik',
-  yearly: 'Yillik',
+  monthly: 'Monthly',
+  quarterly: '3 months',
+  yearly: 'Yearly',
 };
 
 const prices: Record<PlanId, Record<BillingInterval, string>> = {
@@ -32,25 +33,25 @@ const plans: Array<{
   {
     id: 'free',
     name: 'Free',
-    description: 'Kisitli demo kullanimi ve temel chart erisimi.',
-    features: ['Gunluk 3 AI degerlendirme', '15 dakika gecikmeli scanner', 'Temel chart ve skorlar', 'Advanced risk alanlari maskeli'],
-    cta: 'Free kullan',
+    description: 'Basic access for trying the product.',
+    features: ['3 movement checks per day', 'Delayed scanner', 'Basic chart and scores', 'Advanced risk details hidden'],
+    cta: 'Use Free',
   },
   {
     id: 'pro',
     name: 'Shepard Advisor PRO',
-    description: 'Aktif analiz yapan kullanicilar icin temel ucretli paket.',
-    features: ['Gunluk 50 AI degerlendirme', 'Canli scanner gorunumu', 'AI Supervisor ozeti', 'Risk ve whale panelleri acik'],
-    cta: 'PRO baslat',
-    badge: 'En uygun',
+    description: 'For users who check market moves regularly.',
+    features: ['50 movement checks per day', 'Live scanner view', 'Supervisor summary', 'Risk and whale details'],
+    cta: 'Start PRO',
+    badge: 'Best value',
   },
   {
     id: 'trader',
     name: 'Shepard Advisor TRADER',
-    description: 'Yogun kullanim ve manuel market scanner tetikleme icin.',
-    features: ['Gunluk 250 AI degerlendirme', 'Market scanner trigger', 'Tum advanced alanlar', 'Oncelikli urun limiti'],
-    cta: 'TRADER baslat',
-    badge: 'Ust paket',
+    description: 'For higher daily use and manual market scans.',
+    features: ['250 movement checks per day', 'Manual market scanner', 'All advanced details', 'Higher product limits'],
+    cta: 'Start TRADER',
+    badge: 'Highest limit',
   },
 ];
 
@@ -86,8 +87,8 @@ const Pricing = () => {
 
   return (
     <AppShell
-      title="Planlar"
-      subtitle="Abonelik, limit ve Creem checkout akisi"
+      title="Plans"
+      subtitle="Choose limits for movement source analysis."
       action={
         <div className="rounded-md border border-slate-800 bg-slate-950 p-1">
           {(['monthly', 'quarterly', 'yearly'] as BillingInterval[]).map((item) => (
@@ -102,7 +103,7 @@ const Pricing = () => {
                 interval === item && 'bg-cyan-500 text-white hover:bg-cyan-500 hover:text-white'
               )}
             >
-              {intervalLabels[item]}
+              <Trans text={intervalLabels[item]} />
             </Button>
           ))}
         </div>
@@ -126,18 +127,18 @@ const Pricing = () => {
             <CardHeader className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <CardTitle className="text-lg">{plan.name}</CardTitle>
-                {plan.badge && <Badge className="bg-cyan-500/10 text-cyan-300">{plan.badge}</Badge>}
+                {plan.badge && <Badge className="bg-cyan-500/10 text-cyan-300"><Trans text={plan.badge} /></Badge>}
               </div>
-              <p className="text-sm text-slate-400">{plan.description}</p>
+              <p className="text-sm text-slate-400"><Trans text={plan.description} /></p>
               <div>
                 <span className="text-4xl font-semibold">{prices[plan.id][interval]}</span>
-                {plan.id !== 'free' && <span className="ml-2 text-sm text-slate-500">/{intervalLabels[interval].toLowerCase()}</span>}
+                {plan.id !== 'free' && <span className="ml-2 text-sm text-slate-500">/<Trans text={intervalLabels[interval].toLowerCase()} /></span>}
               </div>
               {interval === 'quarterly' && plan.id !== 'free' && (
-                <p className="text-xs text-emerald-300">%25 indirim uygulanmis toplam fiyat</p>
+                <p className="text-xs text-emerald-300"><Trans text="25% discount included in total price" /></p>
               )}
               {interval === 'yearly' && plan.id !== 'free' && (
-                <p className="text-xs text-emerald-300">%50 indirim uygulanmis toplam fiyat</p>
+                <p className="text-xs text-emerald-300"><Trans text="50% discount included in total price" /></p>
               )}
             </CardHeader>
             <CardContent className="flex-1">
@@ -145,7 +146,7 @@ const Pricing = () => {
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex gap-2 text-sm text-slate-300">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                    <span>{feature}</span>
+                    <span><Trans text={feature} /></span>
                   </li>
                 ))}
               </ul>
@@ -158,7 +159,7 @@ const Pricing = () => {
                 disabled={loadingPlan !== null}
               >
                 {loadingPlan === plan.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {plan.cta}
+                <Trans text={plan.cta} />
               </Button>
             </CardFooter>
           </Card>

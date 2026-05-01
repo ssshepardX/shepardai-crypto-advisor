@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Activity } from 'lucide-react';
+import { Trans } from '@/contexts/LanguageContext';
 
 interface RealData {
   symbol: string;
@@ -16,7 +17,7 @@ interface RealData {
 const ScanningCard: React.FC<{ realData: RealData }> = ({ realData }) => {
   const [progress, setProgress] = useState(0);
   const [showData, setShowData] = useState(false);
-  const [loadingText, setLoadingText] = useState("Piyasa Taranıyor...");
+  const [loadingText, setLoadingText] = useState("Checking market data...");
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -31,8 +32,8 @@ const ScanningCard: React.FC<{ realData: RealData }> = ({ realData }) => {
       });
     }, 150);
 
-    setTimeout(() => setLoadingText("Hacim Analiz Ediliyor..."), 500);
-    setTimeout(() => setLoadingText("Hareket Kaynağı Sınıflandırılıyor..."), 1200);
+    setTimeout(() => setLoadingText("Reading volume changes..."), 500);
+    setTimeout(() => setLoadingText("Classifying movement cause..."), 1200);
 
     return () => clearInterval(interval);
   }, []);
@@ -49,7 +50,7 @@ const ScanningCard: React.FC<{ realData: RealData }> = ({ realData }) => {
 
         <div className="space-y-3">
           <div className="flex justify-between text-xs text-cyan-400 font-mono">
-            <span>{loadingText}</span>
+            <span><Trans text={loadingText} /></span>
             <span>{progress}%</span>
           </div>
           <div className="w-full bg-slate-800 rounded-full h-2">
@@ -60,9 +61,9 @@ const ScanningCard: React.FC<{ realData: RealData }> = ({ realData }) => {
           </div>
 
           <div className="mt-4 text-[10px] font-mono text-slate-600 space-y-1 opacity-50">
-            <p>{'>'} Orderbook derinliği okunuyor...</p>
-            <p className={progress > 40 ? 'text-emerald-500' : ''}>{'>'} Whale ve likidite izi kontrol edildi.</p>
-            <p className={progress > 80 ? 'text-cyan-500' : ''}>{'>'} AI Supervisor connecting...</p>
+            <p>{'>'} <Trans text="Reading order book depth" /></p>
+            <p className={progress > 40 ? 'text-emerald-500' : ''}>{'>'} <Trans text="Checking whale and liquidity traces" /></p>
+            <p className={progress > 80 ? 'text-cyan-500' : ''}>{'>'} <Trans text="Preparing short summary" /></p>
           </div>
         </div>
       </div>
@@ -77,28 +78,28 @@ const ScanningCard: React.FC<{ realData: RealData }> = ({ realData }) => {
           <span className="text-xs text-slate-400 font-mono">{new Date(realData.time).toLocaleTimeString()}</span>
         </div>
         <div className={`px-3 py-1 rounded-full text-xs font-bold border ${realData.risk_score > 80 ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
-          UYARI: {realData.early_warning ?? realData.risk_score}/100
+          <Trans text="Alert" />: {realData.early_warning ?? realData.risk_score}/100
         </div>
       </div>
 
       <div className="space-y-3 mb-4">
          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">Hareket Sebebi</span>
+            <span className="text-slate-400"><Trans text="Likely cause" /></span>
             <span className="text-emerald-400 font-mono">{realData.likely_cause || 'balanced_market'}</span>
          </div>
          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">Hacim Patlaması</span>
+            <span className="text-slate-400"><Trans text="Volume spike" /></span>
             <span className="text-cyan-400 font-mono">{realData.volume_spike}x</span>
          </div>
          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">Güven</span>
+            <span className="text-slate-400"><Trans text="Confidence" /></span>
             <span className="text-slate-200 font-mono">{realData.confidence ?? 0}/100</span>
          </div>
       </div>
 
       <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
         <p className="text-xs text-slate-300 leading-relaxed">
-          <span className="text-cyan-500 font-bold">AI Supervisor: </span>
+          <span className="text-cyan-500 font-bold">Supervisor: </span>
           {realData.summary}
         </p>
       </div>
