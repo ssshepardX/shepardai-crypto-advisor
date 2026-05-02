@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  react_uygulamam:
+    build: 
+      context: .
+
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    ports:
+      - "3000:80"
