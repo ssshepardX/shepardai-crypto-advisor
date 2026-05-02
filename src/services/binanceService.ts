@@ -66,7 +66,7 @@ export async function getTop200CoinsByVolume(): Promise<CoinData[]> {
 // Get klines (candlestick data) for a specific symbol
 export async function getBinanceKlines(
   symbol: string, 
-  interval: '1m' | '3m' | '5m' | '15m' | '1h' = '1m',
+  interval: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h' = '1m',
   limit: number = 100
 ): Promise<BinanceKline[]> {
   try {
@@ -189,7 +189,7 @@ export async function scanCoinsForPumps(
     
     if (result && result.isPump) {
       results.push(result);
-      console.log(`🚨 PUMP DETECTED: ${coin} +${result.priceChange.toFixed(2)}% Vol: ${result.volumeMultiplier.toFixed(2)}x`);
+      console.log(`Pump detected: ${coin} +${result.priceChange.toFixed(2)}% Vol: ${result.volumeMultiplier.toFixed(2)}x`);
     }
     
     // Add delay to avoid rate limits

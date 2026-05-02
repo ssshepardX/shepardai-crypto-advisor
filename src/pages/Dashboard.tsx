@@ -1,407 +1,242 @@
-// Ultra-Dark AI Market Analyst Dashboard with Glassmorphism
-
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Activity, BarChart3, Brain, Clock, RefreshCw, ShieldAlert, Zap } from 'lucide-react';
+import AppShell from '@/components/AppShell';
+import ScanningCard from '@/components/ScanningCard';
+import { AlertData, getAlerts } from '@/services/alertsApi';
+import { CoinAnalysis, getRecentAnalyses, scanMarket } from '@/services/coinAnalysisService';
+import {
+  getCurrentSubscription,
+  getTodayUsage,
+  PLAN_ENTITLEMENTS,
+  UserSubscription,
+  UserUsageDaily,
+} from '@/services/subscriptionService';
+import { useSession } from '@/contexts/SessionContext';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Activity,
-  TrendingUp,
-  Zap,
-  Shield,
-  Brain,
-  Eye,
-  BarChart3,
-  Settings,
-  Bell,
-  AlertTriangle,
-  Timer,
-  Users
-} from 'lucide-react';
-import { useSession } from '@/contexts/SessionContext';
-import { useGenerateSignals } from '@/hooks/useGenerateSignals';
-import { PumpAlerts } from '@/components/PumpAlerts';
-import { supabase } from '@/integrations/supabase/client';
-import { getScanResults, getScannerStatus } from '@/services/scannerService';
-import ScanningCard from '@/components/ScanningCard';
-import { ScanData } from '@/services/scannerService';
-import { getAlerts, AlertData } from '@/services/alertsApi';
+import { Trans } from '@/contexts/LanguageContext';
 
-// Mock data for demonstration - replace with real data later
-const mockAlerts = [
-  {
-    id: '1',
-    symbol: 'BTCUSDT',
-    price: 45000,
-    priceChange: 2.5,
-    volumeMultiplier: 3.2,
-    riskScore: 85,
-    aiSummary: 'Critical high volume spike detected on thin order book. AI analysis indicates potential manipulative pump & dump activity in early stages.',
-    likelySource: 'Coordinated Pump Group',
-    actionableInsight: 'Immediate exit position. Monitor for reversal signals.',
-    detectedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    orderbookDepth: 1250000
-  },
-  {
-    id: '2',
-    symbol: 'XRPUSDT',
-    price: 0.42,
-    priceChange: 1.8,
-    volumeMultiplier: 2.1,
-    riskScore: 45,
-    aiSummary: 'Moderate volume increase with strong buy pressure. Potentially organic growth momentum building.',
-    likelySource: 'Accumulation Phase',
-    actionableInsight: 'Consider entry with tight stop loss. Monitor volume sustainability.',
-    detectedAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-    orderbookDepth: 2100000
-  },
-  {
-    id: '3',
-    symbol: 'ETHUSDT',
-    price: 2850,
-    priceChange: 0.8,
-    volumeMultiplier: 1.9,
-    riskScore: 25,
-    aiSummary: 'Low risk. Steady accumulation detected with balanced order book depth.',
-    likelySource: 'Organic Trading',
-    actionableInsight: 'Safe to continue monitoring. No immediate action required.',
-    detectedAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-    orderbookDepth: 23000000
-  }
-];
+const starterPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT'];
 
 const DashboardPage = () => {
   const { session, loading } = useSession();
-  const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
-  const [scanResults, setScanResults] = useState<AlertData[]>([]);
-  const [scannerStatus, setScannerStatus] = useState({ isActive: false, lastScanTime: null, totalScans: 0 });
-  const [isLoadingScans, setIsLoadingScans] = useState(false);
-  const [systemStatus, setSystemStatus] = useState({
-    watcherActive: true,
-    aiWorkerActive: true,
-    pendingJobs: 0,
-    alertsToday: 47
-  });
+  const [alerts, setAlerts] = useState<AlertData[]>([]);
+  const [recentAnalyses, setRecentAnalyses] = useState<CoinAnalysis[]>([]);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [usage, setUsage] = useState<UserUsageDaily | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
-  // Effects for auto-refreshing scanner data
-  useEffect(() => {
-    // Initial fetch
-    fetchScanResults();
+  const entitlement = useMemo(
+    () => PLAN_ENTITLEMENTS[subscription?.plan || 'free'],
+    [subscription?.plan]
+  );
 
-    // Set up periodic refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchScanResults();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, []);
-  const fetchScanResults = async () => {
-    setIsLoadingScans(true);
+  const loadMarketData = useCallback(async () => {
     try {
-      const response = await getAlerts();
+      const [alertResponse, analyses] = await Promise.allSettled([getAlerts(), getRecentAnalyses()]);
+      if (alertResponse.status === 'fulfilled') setAlerts(alertResponse.value.alerts);
+      if (analyses.status === 'fulfilled') setRecentAnalyses(analyses.value);
+    } catch {
+      setAlerts([]);
+      setRecentAnalyses([]);
+    }
+  }, []);
 
-      setScanResults(response.alerts);
-      setScannerStatus({
-        isActive: true,
-        lastScanTime: response.timestamp,
-        totalScans: response.alerts.length
-      });
-
-      console.log(`📊 Fetched ${response.alerts.length} alerts from Supabase`);
-      console.log('🔄 Last update:', response.timestamp);
-    } catch (error) {
-      console.error('Failed to fetch alerts:', error);
-      setScanResults([]);
-      setScannerStatus({ isActive: false, lastScanTime: null, totalScans: 0 });
+  const loadDashboard = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [sub, today] = await Promise.all([getCurrentSubscription(), getTodayUsage()]);
+      setSubscription(sub);
+      setUsage(today);
+      await loadMarketData();
     } finally {
-      setIsLoadingScans(false);
+      setIsLoading(false);
+    }
+  }, [loadMarketData]);
+
+  useEffect(() => {
+    document.body.className = 'dark';
+    loadDashboard();
+    const interval = window.setInterval(() => {
+      loadMarketData();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [loadDashboard, loadMarketData]);
+
+  const runMarketScan = async () => {
+    setMessage(null);
+    setIsLoading(true);
+    try {
+      const analyses = await scanMarket();
+      setRecentAnalyses(analyses);
+      const today = await getTodayUsage();
+      setUsage(today);
+      setMessage('Market scanner tamamlandi.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Market scanner calistirilamadi.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // Ultra-dark theme background effect
-  useEffect(() => {
-    document.body.className = 'dark';
-  }, []);
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iYSIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgd2lkdGg9IjIwIiBoZWlnaHQ9IjIwIj48Y2lyY2xlIHI9IjEiIGN5PSIyIiBmaWxsPSIjNmI3MjgwIiAvPjpwYXR0ZXJuPjxkZWZzPjxzLmc+PGNpcmNsZSByPSIyIiBjeD0iMTAiIGN5PSIxMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjd1cTgxNCIgc3Ryb2tlLW9wYWNpdHk9IjAuNCIvPg==')] opacity-30" />
-
-        <div className="relative z-10 min-h-screen flex flex-col">
-          {/* Glass navbar placeholder */}
-          <div className="sticky top-0 z-50 w-full bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
-            <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-sky-500 rounded-lg flex items-center justify-center">
-                  <Brain className="h-5 w-5 text-white" />
-                </div>
-                <span className="text-white font-['Inter'] font-semibold">AI Market Analyst</span>
-              </div>
-              <div className="w-32 h-8 bg-slate-800/50 rounded-lg animate-pulse" />
-            </div>
+      <div className="min-h-screen bg-slate-950 p-6 text-slate-100">
+        <div className="mx-auto max-w-7xl animate-pulse space-y-4">
+          <div className="h-16 rounded-md bg-slate-900" />
+          <div className="grid gap-4 md:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-28 rounded-md bg-slate-900" />
+            ))}
           </div>
-
-          <main className="flex-grow container mx-auto px-4 py-8">
-            <div className="animate-pulse">
-              <div className="h-12 bg-slate-800/50 rounded-xl mb-8 max-w-md"></div>
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-20 bg-slate-800/50 rounded-xl"></div>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-48 bg-slate-800/50 rounded-xl"></div>
-                ))}
-              </div>
-            </div>
-          </main>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-zinc-950">
-      {/* Background pattern */}
-      <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-slate-950"></div>
-        <div className="absolute inset-0 opacity-30">
-          <div className="w-full h-full bg-[radial-gradient(circle_at_center,rgba(6,182,212,0.05)_0%,transparent_70%)] animate-pulse"></div>
+    <AppShell
+      title={`Dashboard${session?.user?.email ? ` - ${session.user.email.split('@')[0]}` : ''}`}
+      subtitle="See account limits and recent movement checks."
+      action={
+        <Button onClick={loadDashboard} disabled={isLoading} variant="outline" className="border-slate-700 bg-slate-900">
+          <RefreshCw className="mr-2 h-4 w-4" />
+          <Trans text="Refresh" />
+        </Button>
+      }
+    >
+      {message && (
+        <div className="rounded-md border border-slate-800 bg-slate-900 p-3 text-sm text-slate-300">
+          {message}
         </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <MetricCard icon={ShieldAlert} label="Plan" value={subscription?.plan.toUpperCase() || 'FREE'} />
+        <MetricCard icon={Brain} label="Daily checks" value={`${usage?.ai_analysis_count || 0}/${entitlement.aiDailyLimit}`} />
+        <MetricCard icon={Activity} label="Scanner" value={entitlement.canRunScanner ? 'Enabled' : `${entitlement.scannerDelayMinutes} min delay`} />
+        <MetricCard icon={Clock} label="Renewal" value={subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString('tr-TR') : '-'} />
       </div>
 
-      {/* Glass Navigation */}
-      <nav className="sticky top-0 z-50 w-full bg-slate-950/80 backdrop-blur-xl border-b border-white/10 shadow-lg">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-sky-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Brain className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-slate-200 font-inter font-semibold text-lg">
-                AI Market Analyst
-              </h1>
-              <p className="text-slate-400 font-jetbrains text-xs">
-                Crypto pump & dump detection
-              </p>
-            </div>
+      <Card className="border-slate-800 bg-slate-900">
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle className="text-base"><Trans text="Movement scanner" /></CardTitle>
+            <p className="mt-1 text-sm text-slate-400">
+              <Trans text="Checks recent market moves and classifies the likely cause." />
+            </p>
           </div>
-
-          <div className="flex items-center gap-4">
-            {/* System Status */}
-            <div className="hidden md:flex items-center gap-2">
-              <div className="flex items-center gap-2 bg-slate-800/50 backdrop-blur-sm rounded-lg px-3 py-1">
-                <div className={`w-2 h-2 rounded-full ${systemStatus.watcherActive ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                <span className="text-xs text-slate-300 font-jetbrains">Market Watcher</span>
-              </div>
-              <div className="flex items-center gap-2 bg-slate-800/50 backdrop-blur-sm rounded-lg px-3 py-1">
-                <div className={`w-2 h-2 rounded-full ${systemStatus.aiWorkerActive ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                <span className="text-xs text-slate-300 font-jetbrains">AI Worker</span>
-              </div>
+          <Button onClick={runMarketScan} disabled={isLoading || !entitlement.canRunScanner} className="bg-cyan-500 hover:bg-cyan-600">
+            <Zap className="mr-2 h-4 w-4" />
+            Scan Market
+          </Button>
+        </CardHeader>
+        {!entitlement.canRunScanner && (
+          <CardContent>
+            <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-200">
+              <Trans text="Manual scanning is available on the Trader plan. Cached results remain visible." />
             </div>
+          </CardContent>
+        )}
+      </Card>
 
-            <div className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-slate-400 cursor-pointer hover:text-cyan-400 transition-colors" />
-              <Bell className="h-5 w-5 text-slate-400 cursor-pointer hover:text-cyan-400 transition-colors" />
-</div>
+      <Card className="border-slate-800 bg-slate-900">
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle className="text-base"><Trans text="Market lab" /></CardTitle>
+            <p className="mt-1 text-sm text-slate-400"><Trans text="Open a pair and inspect the likely cause behind its move." /></p>
           </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="relative z-10 container mx-auto px-4 py-6 space-y-6 max-w-7xl">
-        {/* Welcome Section */}
-        <div className="bg-slate-950/80 backdrop-blur-xl border border-white/10 rounded-xl p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-inter font-semibold text-slate-200 mb-2">
-                Welcome back, {session?.user?.email?.split('@')[0]}
-              </h2>
-              <p className="text-slate-400 font-inter">
-                Your AI-powered market surveillance system is actively monitoring real-time anomalies
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-cyan-400" />
-              <span className="text-cyan-400 font-jetbrains font-medium">
-                AI Systems Active
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* System Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="bg-slate-950/50 backdrop-blur-md border-white/10">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-rose-500/10 rounded-lg">
-                  <AlertTriangle className="h-5 w-5 text-rose-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-jetbrains font-bold text-rose-400">
-                    {systemStatus.alertsToday}
-                  </p>
-                  <p className="text-xs text-slate-400">Critical Alerts</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-950/50 backdrop-blur-md border-white/10">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-cyan-500/10 rounded-lg">
-                  <Brain className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-jetbrains font-bold text-cyan-400">
-                    {systemStatus.pendingJobs}
-                  </p>
-                  <p className="text-xs text-slate-400">AI Queue</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-950/50 backdrop-blur-md border-white/10">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-500/10 rounded-lg">
-                  <Activity className="h-5 w-5 text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-jetbrains font-bold text-emerald-400">
-                    {scannerStatus.isActive ? 'Active' : 'Inactive'}
-                  </p>
-                  <p className="text-xs text-slate-400">Scanner Status</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-950/50 backdrop-blur-md border-white/10">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-500/10 rounded-lg">
-                  <Timer className="h-5 w-5 text-yellow-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-jetbrains font-bold text-yellow-400">
-                    30s
-                  </p>
-                  <p className="text-xs text-slate-400">Supabase Scan Interval</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Control Panel */}
-        <div className="bg-slate-950/80 backdrop-blur-xl border border-white/10 rounded-xl p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-            <div>
-              <h3 className="text-lg font-inter font-semibold text-slate-200">
-                Supabase Market Surveillance Control
-              </h3>
-              <p className="text-sm text-slate-400">
-                Background scanning on Supabase Edge Functions - {scannerStatus.totalScans} scans completed
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                onClick={fetchScanResults}
-                disabled={isLoadingScans}
-                className="bg-gradient-to-r from-cyan-500 to-sky-500 hover:from-cyan-600 hover:to-sky-600 text-white font-inter font-medium px-4 py-2 rounded-lg"
-              >
-                <Activity className="h-4 w-4 mr-2" />
-                Refresh Data
+          <Button asChild className="bg-cyan-500 hover:bg-cyan-600">
+            <Link to="/analysis">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Ac
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+            {starterPairs.map((symbol) => (
+              <Button key={symbol} asChild variant="outline" className="border-slate-700 bg-slate-950">
+                <Link to={`/analysis/${symbol}`}>{symbol.replace('USDT', '')}</Link>
               </Button>
-            </div>
+            ))}
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="bg-slate-800/50 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-300 font-inter">
-                Scanner Status
-              </span>
-              <span className={`text-sm font-bold ${scannerStatus.isActive ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {scannerStatus.isActive ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-2">
-              Last update: {scannerStatus.lastScanTime ? new Date(scannerStatus.lastScanTime).toLocaleString() : 'Never'}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              System scans every 30 seconds in Supabase Edge Runtime
-            </p>
-          </div>
-        </div>
-
-        {/* Active AI Alerts from Supabase */}
-        <div className="space-y-4">
+      {recentAnalyses.length > 0 && (
+        <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-xl font-inter font-semibold text-slate-200">
-              Supabase AI Scanner Results
-            </h3>
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${scannerStatus.isActive ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-              <span className="text-sm text-slate-400 font-jetbrains">
-                Supabase Edge Runtime Active
-              </span>
-            </div>
+            <h2 className="text-lg font-semibold text-slate-100"><Trans text="Recent movement checks" /></h2>
+            <Badge className="bg-slate-800 text-slate-300">Cause cache</Badge>
           </div>
-
-          {isLoadingScans ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="bg-slate-900 border border-slate-800 rounded-xl p-6 animate-pulse">
-                  <div className="h-4 bg-slate-700 rounded mb-4"></div>
-                  <div className="space-y-2">
-                    <div className="h-3 bg-slate-700 rounded"></div>
-                    <div className="h-3 bg-slate-700 rounded w-2/3"></div>
-                    <div className="h-20 bg-slate-700 rounded mt-4"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : scanResults.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {scanResults.slice(0, 12).map((scan) => (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {recentAnalyses.slice(0, 6).map((analysis) => (
+              <Link key={analysis.id} to={`/analysis/${analysis.symbol}`}>
                 <ScanningCard
-                  key={scan.id}
+                  realData={{
+                    symbol: analysis.symbol,
+                    time: analysis.created_at,
+                    risk_score: analysis.risk_json.pump_dump_risk_score,
+                    price_change: analysis.risk_json.trend_score,
+                    volume_spike: analysis.indicator_json.volumeMultiplier,
+                    summary: analysis.ai_summary_json.catalyst_summary_tr || analysis.ai_summary_json.summary_tr || 'Hareket kaynagi siniflandirildi',
+                    likely_cause: analysis.cause_json?.likely_cause,
+                    confidence: analysis.cause_json?.confidence_score,
+                    early_warning: analysis.cause_json?.early_warning_score,
+                  }}
+                />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-100"><Trans text="Scanner results" /></h2>
+          <Badge className="bg-slate-800 text-slate-300">{alerts.length} sonuc</Badge>
+        </div>
+        {alerts.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {alerts.slice(0, 12).map((scan) => (
+              <Link key={scan.id} to={`/analysis/${scan.symbol}`}>
+                <ScanningCard
                   realData={{
                     symbol: scan.symbol,
                     time: scan.created_at,
                     risk_score: scan.risk_score,
-                    price_change: 0, // Will enhance with real data later
-                    volume_spike: 1,
-                    summary: scan.summary || 'Analysis in progress...'
+                    price_change: scan.price_change || 0,
+                    volume_spike: scan.volume_spike || 1,
+                    summary: scan.summary || 'Scanner signal',
                   }}
                 />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 bg-slate-950/50 backdrop-blur-md border border-white/10 rounded-xl">
-              <Brain className="h-16 w-16 mx-auto mb-4 text-slate-600 animate-pulse" />
-              <h4 className="text-lg font-inter font-medium text-slate-400 mb-2">
-                Supabase Scanner Waiting for Anomalies
-              </h4>
-              <p className="text-slate-500 text-sm max-w-md mx-auto">
-                No anomalies detected yet. The scanner is actively monitoring the top 200 cryptocurrencies
-                and will display results here when pump/dump patterns are identified.
-              </p>
-              <div className="mt-4 text-xs text-slate-400">
-                Console'da tarama logları görünmeli: "🔍 Starting market scan..."
-              </div>
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-400">
+            <Trans text="No scanner result yet." />
+          </div>
+        )}
+      </section>
+    </AppShell>
   );
 };
+
+const MetricCard = ({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) => (
+  <Card className="border-slate-800 bg-slate-900">
+    <CardContent className="flex items-center justify-between p-4">
+      <div>
+        <p className="text-xs text-slate-500"><Trans text={label} /></p>
+        <p className="mt-1 text-xl font-semibold text-slate-100">{value}</p>
+      </div>
+      <Icon className="h-6 w-6 text-cyan-400" />
+    </CardContent>
+  </Card>
+);
 
 export default DashboardPage;

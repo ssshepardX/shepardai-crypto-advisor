@@ -82,7 +82,7 @@ class NotificationService {
   // High-risk alert with sound
   async notifyHighRisk(symbol: string, riskScore: number, summary: string): Promise<void> {
     await this.notify({
-      title: `🚨 ${symbol} Yüksek Risk Uyarısı`,
+      title: `${symbol} Yüksek Risk Uyarısı`,
       body: `Risk Skoru: ${riskScore}/100\n${summary}`,
       requireInteraction: true,
       tag: `high-risk-${symbol}`

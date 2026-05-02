@@ -45,7 +45,7 @@ const LivePriceTicker = () => {
           <TickerItem key={`${item!.symbol}-clone`} symbol={item!.symbol} price={item!.lastPrice} change={parseFloat(item!.priceChangePercent)} />
         ))}
       </div>
-      <style jsx>{`
+      <style>{`
         @keyframes marquee {
           0% { transform: translateX(0%); }
           100% { transform: translateX(-50%); }

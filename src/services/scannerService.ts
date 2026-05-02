@@ -44,7 +44,7 @@ export async function getScanResults(): Promise<ScannerResponse> {
 // Trigger a manual scan (for development/testing)
 export async function triggerManualScan(): Promise<{ message: string; status: 'success' | 'error' }> {
   try {
-    console.log('🔄 Triggering manual scan...');
+    console.log('Triggering manual scan...');
 
     const { data, error } = await supabase.functions.invoke('scanner', {
       method: 'POST'

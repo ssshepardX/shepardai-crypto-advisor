@@ -1,139 +1,171 @@
-import { useState } from "react";
-import Navbar from "@/components/Navbar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Check } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Check, Loader2 } from 'lucide-react';
+import AppShell from '@/components/AppShell';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+import { useSession } from '@/contexts/SessionContext';
+import { Trans } from '@/contexts/LanguageContext';
+import { BillingInterval, createCheckout, PlanId } from '@/services/subscriptionService';
 
-const plans = [
+const intervalLabels: Record<BillingInterval, string> = {
+  monthly: 'Monthly',
+  quarterly: '3 months',
+  yearly: 'Yearly',
+};
+
+const prices: Record<PlanId, Record<BillingInterval, string>> = {
+  free: { monthly: '€0', quarterly: '€0', yearly: '€0' },
+  pro: { monthly: '€4.99', quarterly: '€11.23', yearly: '€29.94' },
+  trader: { monthly: '€9.99', quarterly: '€22.48', yearly: '€59.94' },
+};
+
+const plans: Array<{
+  id: PlanId;
+  name: string;
+  description: string;
+  features: string[];
+  cta: string;
+  badge?: string;
+}> = [
   {
-    name: "Free",
-    priceMonthly: 0,
-    priceYearly: 0,
-    description: "Start with 1 daily signal and basic features.",
-    features: [
-      "1 random signal per day",
-      "Basic performance metrics",
-      "Email notifications",
-      "Limited chart analysis",
-      "Community support",
-    ],
-    cta: "Get Started",
+    id: 'free',
+    name: 'Free',
+    description: 'Basic access for trying the product.',
+    features: ['3 movement checks per day', 'Delayed scanner', 'Basic chart and scores', 'Advanced risk details hidden'],
+    cta: 'Use Free',
   },
   {
-    name: "Scalper",
-    // Monthly price (will be billed annually). Display shows monthly but charged yearly.
-    priceMonthly: 9.99,
-    // priceYearly kept equal to monthly to represent the monthly rate when billed annually
-    priceYearly: 9.99,
-    description: "Perfect for active day traders.",
-    features: [
-      "Access to all signals",
-      "Real-time entry/exit points",
-      "Advanced performance metrics",
-      "Favorite coins tracking",
-      "Priority email support",
-      "Stop-loss recommendations",
-    ],
-    cta: "Become a Scalper",
-    popular: true,
+    id: 'pro',
+    name: 'Shepard Advisor PRO',
+    description: 'For users who check market moves regularly.',
+    features: ['50 movement checks per day', 'Live scanner view', 'Supervisor summary', 'Risk and whale details'],
+    cta: 'Start PRO',
+    badge: 'Best value',
   },
   {
-    name: "Pro Trader",
-    // Monthly price (will be billed annually). Display shows monthly but charged yearly.
-    priceMonthly: 17.99,
-    priceYearly: 17.99,
-    description: "Advanced analysis and AI-powered insights.",
-    features: [
-      "All Scalper features",
-      "Detailed AI market analysis",
-      "Risk level assessment",
-      "Multi-timeframe signals",
-      "Custom alert settings",
-      "1-on-1 trading consultation",
-      "VIP Discord access",
-    ],
-    cta: "Go Pro",
+    id: 'trader',
+    name: 'Shepard Advisor TRADER',
+    description: 'For higher daily use and manual market scans.',
+    features: ['250 movement checks per day', 'Manual market scanner', 'All advanced details', 'Higher product limits'],
+    cta: 'Start TRADER',
+    badge: 'Highest limit',
   },
 ];
 
 const Pricing = () => {
-  // Default to yearly so the site shows 'billed annually' (monthly price, charged yearly)
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("yearly");
+  const [interval, setInterval] = useState<BillingInterval>('monthly');
+  const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { session } = useSession();
+  const navigate = useNavigate();
+
+  const handleSelectPlan = async (plan: PlanId) => {
+    setError(null);
+    if (plan === 'free') {
+      navigate(session ? '/dashboard' : '/login');
+      return;
+    }
+
+    if (!session) {
+      navigate('/login');
+      return;
+    }
+
+    setLoadingPlan(plan);
+    try {
+      const checkout = await createCheckout(plan, interval);
+      window.location.href = checkout.checkout_url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Checkout olusturulamadi.');
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Navbar />
-      <main className="flex-grow container mx-auto px-4 py-12">
-        <div className="text-center max-w-3xl mx-auto">
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4">
-            Find the perfect plan
-          </h1>
-          <p className="text-lg text-muted-foreground mb-8">
-            Start for free, then upgrade to a paid plan to unlock more features and power up your trading strategy.
-          </p>
-          <div className="flex items-center justify-center space-x-4 mb-12">
-            <Label htmlFor="billing-cycle" className={cn(billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground')}>
-              Pay Monthly
-            </Label>
-            <Switch
-              id="billing-cycle"
-              checked={billingCycle === "yearly"}
-              onCheckedChange={(checked) => setBillingCycle(checked ? "yearly" : "monthly")}
-            />
-            <Label htmlFor="billing-cycle" className={cn(billingCycle === 'yearly' ? 'text-foreground' : 'text-muted-foreground')}>
-              Pay Annually <span className="text-green-500 font-semibold">(Save up to 23%)</span>
-            </Label>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-8">
-          {plans.map((plan) => (
-            <Card key={plan.name} className={cn("flex flex-col", plan.popular && "border-purple-500 shadow-lg shadow-purple-500/20")}>
-              {plan.popular && (
-                <div className="bg-purple-500 text-white text-xs font-bold text-center py-1 rounded-t-lg">
-                  Most Popular
-                </div>
+    <AppShell
+      title="Plans"
+      subtitle="Choose limits for movement source analysis."
+      action={
+        <div className="rounded-md border border-slate-800 bg-slate-950 p-1">
+          {(['monthly', 'quarterly', 'yearly'] as BillingInterval[]).map((item) => (
+            <Button
+              key={item}
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setInterval(item)}
+              className={cn(
+                'h-8 rounded px-3 text-slate-400 hover:bg-slate-900 hover:text-slate-100',
+                interval === item && 'bg-cyan-500 text-white hover:bg-cyan-500 hover:text-white'
               )}
-              <CardHeader>
-                <CardTitle>{plan.name}</CardTitle>
-                <CardDescription>{plan.description}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow space-y-6">
-                <div className="flex flex-col">
-                  <div className="flex items-baseline">
-                    <span className="text-4xl font-bold">
-                      ${billingCycle === "monthly" ? plan.priceMonthly : plan.priceYearly}
-                    </span>
-                    <span className="text-muted-foreground ml-2">/month</span>
-                  </div>
-                  {billingCycle === "yearly" && plan.priceYearly > 0 && (
-                    <div className="text-sm text-green-500">
-                      Billed annually (${(plan.priceYearly * 12).toFixed(2)}/year)
-                    </div>
-                  )}
-                </div>
-                <ul className="space-y-3">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center">
-                      <Check className="h-4 w-4 text-green-500 mr-2" />
-                      <span className="text-sm text-muted-foreground">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full" variant={plan.popular ? "default" : "outline"}>
-                  {plan.cta}
-                </Button>
-              </CardFooter>
-            </Card>
+            >
+              <Trans text={intervalLabels[item]} />
+            </Button>
           ))}
         </div>
-      </main>
-    </div>
+      }
+    >
+      {error && (
+        <div className="rounded-md border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">
+          {error}
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {plans.map((plan) => (
+          <Card
+            key={plan.id}
+            className={cn(
+              'flex flex-col border-slate-800 bg-slate-900 text-slate-100',
+              plan.id === 'trader' && 'border-cyan-500/40'
+            )}
+          >
+            <CardHeader className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-lg">{plan.name}</CardTitle>
+                {plan.badge && <Badge className="bg-cyan-500/10 text-cyan-300"><Trans text={plan.badge} /></Badge>}
+              </div>
+              <p className="text-sm text-slate-400"><Trans text={plan.description} /></p>
+              <div>
+                <span className="text-4xl font-semibold">{prices[plan.id][interval]}</span>
+                {plan.id !== 'free' && <span className="ml-2 text-sm text-slate-500">/<Trans text={intervalLabels[interval].toLowerCase()} /></span>}
+              </div>
+              {interval === 'quarterly' && plan.id !== 'free' && (
+                <p className="text-xs text-emerald-300"><Trans text="25% discount included in total price" /></p>
+              )}
+              {interval === 'yearly' && plan.id !== 'free' && (
+                <p className="text-xs text-emerald-300"><Trans text="50% discount included in total price" /></p>
+              )}
+            </CardHeader>
+            <CardContent className="flex-1">
+              <ul className="space-y-3">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex gap-2 text-sm text-slate-300">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                    <span><Trans text={feature} /></span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+            <CardFooter>
+              <Button
+                className={cn('w-full', plan.id === 'trader' ? 'bg-cyan-500 hover:bg-cyan-600' : '')}
+                variant={plan.id === 'free' ? 'outline' : 'default'}
+                onClick={() => handleSelectPlan(plan.id)}
+                disabled={loadingPlan !== null}
+              >
+                {loadingPlan === plan.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Trans text={plan.cta} />
+              </Button>
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
+    </AppShell>
   );
 };
 

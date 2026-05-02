@@ -23,8 +23,8 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 // Define subscription plans and their features
 enum SubscriptionPlan {
   FREE = 'free',
-  INSIGHTER = 'dyorist', // $9.99
-  ANALYZER = 'pro_trader'    // $14.99
+  PRO = 'pro',
+  TRADER = 'trader'
 }
 
 interface UserSubscription {
@@ -66,16 +66,16 @@ interface FreeAlert extends BaseAlert {
   actionable_insight: null;
 }
 
-interface InsighterAlert extends BaseAlert {
-  summary: null;
+interface ProAlert extends BaseAlert {
+  summary: string | null;
   likely_source: null;
   actionable_insight: null;
 }
 
-interface AnalyzerAlert extends BaseAlert {
-  summary: string;
-  likely_source: string;
-  actionable_insight: string;
+interface TraderAlert extends BaseAlert {
+  summary: string | null;
+  likely_source: string | null;
+  actionable_insight: string | null;
 }
 
 // Helper function to get user's subscription plan
@@ -91,7 +91,7 @@ async function getUserSubscription(userId: string): Promise<UserSubscription> {
 
     if (!subError && subData) {
       return {
-        plan: subData.plan as SubscriptionPlan,
+        plan: normalizePlan(subData.plan),
         active: subData.active
       };
     }
@@ -101,7 +101,7 @@ async function getUserSubscription(userId: string): Promise<UserSubscription> {
 
     if (!authError && authData?.user?.app_metadata?.subscription) {
       return {
-        plan: authData.user.app_metadata.subscription,
+        plan: normalizePlan(authData.user.app_metadata.subscription),
         active: true
       };
     }
@@ -127,7 +127,7 @@ async function getUserSubscription(userId: string): Promise<UserSubscription> {
 async function filterAlertsBySubscription(
   alerts: AnalysisJob[],
   subscription: UserSubscription
-): Promise<(FreeAlert | InsighterAlert | AnalyzerAlert)[]> {
+): Promise<(FreeAlert | ProAlert | TraderAlert)[]> {
   const now = new Date();
   const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
 
@@ -163,21 +163,21 @@ async function filterAlertsBySubscription(
           actionable_insight: null
         } as FreeAlert;
 
-      case SubscriptionPlan.INSIGHTER:
+      case SubscriptionPlan.PRO:
         return {
           ...baseAlert,
-          summary: null,
+          summary: alert.summary || null,
           likely_source: null,
           actionable_insight: null
-        } as InsighterAlert;
+        } as ProAlert;
 
-      case SubscriptionPlan.ANALYZER:
+      case SubscriptionPlan.TRADER:
         return {
           ...baseAlert,
-          summary: alert.summary,
-          likely_source: alert.likely_source,
-          actionable_insight: alert.actionable_insight
-        } as AnalyzerAlert;
+          summary: alert.summary || null,
+          likely_source: alert.likely_source || null,
+          actionable_insight: alert.actionable_insight || null
+        } as TraderAlert;
 
       default:
         return {
@@ -294,25 +294,42 @@ function getPlanFeatures(plan: SubscriptionPlan) {
       return {
         realTimeAlerts: false,
         aiQualitativeFields: false,
+        canRunScanner: false,
+        canViewAdvancedRisk: false,
+        aiDailyLimit: 3,
         timeDelayMinutes: 15
       };
-    case SubscriptionPlan.INSIGHTER:
-      return {
-        realTimeAlerts: true,
-        aiQualitativeFields: false,
-        timeDelayMinutes: 0
-      };
-    case SubscriptionPlan.ANALYZER:
+    case SubscriptionPlan.PRO:
       return {
         realTimeAlerts: true,
         aiQualitativeFields: true,
+        canRunScanner: false,
+        canViewAdvancedRisk: true,
+        aiDailyLimit: 50,
+        timeDelayMinutes: 0
+      };
+    case SubscriptionPlan.TRADER:
+      return {
+        realTimeAlerts: true,
+        aiQualitativeFields: true,
+        canRunScanner: true,
+        canViewAdvancedRisk: true,
+        aiDailyLimit: 250,
         timeDelayMinutes: 0
       };
     default:
       return {
         realTimeAlerts: false,
         aiQualitativeFields: false,
+        canRunScanner: false,
+        canViewAdvancedRisk: false,
+        aiDailyLimit: 3,
         timeDelayMinutes: 15
       };
   }
+}
+
+function normalizePlan(plan: string | null | undefined): SubscriptionPlan {
+  if (plan === SubscriptionPlan.PRO || plan === SubscriptionPlan.TRADER) return plan;
+  return SubscriptionPlan.FREE;
 }

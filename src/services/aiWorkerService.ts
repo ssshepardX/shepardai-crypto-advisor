@@ -70,7 +70,7 @@ class AIWorkerService {
       }
 
       currentJob = jobs[0]; // Get the first job
-      console.log(`🔄 İş alınıyor: ${currentJob.symbol}`);
+      console.log(`Is aliniyor: ${currentJob.symbol}`);
 
       // 4.2 Check 15-minute cache rule
       const cacheCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
@@ -199,8 +199,8 @@ class AIWorkerService {
     orderbookData: OrderbookData,
     socialData: SocialData
   ): Promise<AIAnalysisResult | null> {
-    const prompt = `TASK: You are a crypto market anomaly analyst. 
-Analyze the provided data and assess the risk of a 'Pump & Dump' or manipulation.
+    const prompt = `TASK: You are a crypto market movement source analyst.
+Analyze the provided data and assess whether the move looks organic, whale-driven, low-liquidity, or manipulated.
 
 DATA:
 - Coin: ${symbol}
@@ -215,9 +215,9 @@ Based on this data, generate a risk analysis in the following JSON format.
 PERFECT EXAMPLE OF OUTPUT:
 {
   "risk_score": 95,
-  "summary": "High Risk: Sudden volume spike on a thin order book. Typical 'Pump & Dump' trap.",
-  "likely_source": "Pump Group / Coordinated Movement",
-  "actionable_insight": "Avoid FOMO. A pullback is likely."
+  "summary": "High Risk: Sudden volume spike on a thin order book.",
+  "likely_source": "Possible coordinated movement",
+  "actionable_insight": "Wait for stronger confirmation."
 }
 
 Output ONLY the JSON. Do not include any other explanations.`;
@@ -231,7 +231,7 @@ Output ONLY the JSON. Do not include any other explanations.`;
         })
       });
 
-      if (!response.ok) throw new Error(`Gemini API error: ${response.statusText}`);
+      if (!response.ok) throw new Error(`AI provider error: ${response.statusText}`);
       
       const data = await response.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -241,7 +241,7 @@ Output ONLY the JSON. Do not include any other explanations.`;
       return null;
 
     } catch (error) {
-      console.error(`Gemini API hatası (${symbol}):`, error);
+      console.error(`AI provider error (${symbol}):`, error);
       return null;
     }
   }

@@ -22,6 +22,9 @@ export interface SubscriptionFeatures {
   features: {
     realTimeAlerts: boolean;
     aiQualitativeFields: boolean;
+    canRunScanner: boolean;
+    canViewAdvancedRisk: boolean;
+    aiDailyLimit: number;
     timeDelayMinutes: number;
   };
 }
@@ -129,6 +132,9 @@ export async function loadAlertsWithFallback(): Promise<{
         features: {
           realTimeAlerts: false,
           aiQualitativeFields: false,
+          canRunScanner: false,
+          canViewAdvancedRisk: false,
+          aiDailyLimit: 3,
           timeDelayMinutes: 15
         }
       },

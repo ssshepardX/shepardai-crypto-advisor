@@ -1,4 +1,4 @@
-// AI Service using Google Gemini for crypto pump analysis
+// Legacy client-side market source analysis.
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent';
@@ -25,7 +25,7 @@ export interface PumpAnalysisInput {
 // Analyze if pump is organic or manipulation
 export async function analyzePumpWithAI(input: PumpAnalysisInput): Promise<AIAnalysisResult> {
   if (!GEMINI_API_KEY) {
-    console.warn('Gemini API key not found, returning default analysis');
+    console.warn('AI key not found, returning deterministic analysis');
     return getDefaultAnalysis(input);
   }
 
@@ -46,7 +46,7 @@ Analyze:
 2. What is the whale movement probability (0-100)?
 3. Risk level: Low/Moderate/High/Critical
 4. Detailed risk analysis (2-3 sentences)
-5. Trading advice (should traders enter, exit, or wait?)
+5. Risk note without buy/sell instructions
 6. Warning signals to watch for
 
 Respond ONLY with a valid JSON object in this exact format:
@@ -55,7 +55,7 @@ Respond ONLY with a valid JSON object in this exact format:
   "whaleMovementProbability": 0-100,
   "riskLevel": "Low/Moderate/High/Critical",
   "riskAnalysis": "detailed analysis here",
-  "tradingAdvice": "specific advice here",
+  "tradingAdvice": "risk note here",
   "warningSignals": ["signal1", "signal2", "signal3"],
   "marketState": "brief market state description"
 }`;
@@ -79,7 +79,7 @@ Respond ONLY with a valid JSON object in this exact format:
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.statusText}`);
+      throw new Error(`AI provider error: ${response.statusText}`);
     }
 
     const data = await response.json();
@@ -136,16 +136,16 @@ function getDefaultAnalysis(input: PumpAnalysisInput): AIAnalysisResult {
   let tradingAdvice: string;
   switch (riskLevel) {
     case 'High':
-      tradingAdvice = 'High risk detected. Wait for confirmation and avoid FOMO entries. Consider taking profits if already in position.';
+      tradingAdvice = 'High risk detected. Wait for more confirmation.';
       break;
     case 'Critical':
-      tradingAdvice = 'Critical risk detected. Immediate exit recommended. This appears to be manipulation.';
+      tradingAdvice = 'Critical risk detected. The move may be manipulated.';
       break;
     case 'Moderate':
-      tradingAdvice = 'Moderate opportunity. Enter with tight stop-loss and defined risk. Monitor for volume continuation.';
+      tradingAdvice = 'Moderate risk. Watch volume and liquidity before acting.';
       break;
     case 'Low':
-      tradingAdvice = 'Lower risk entry possible. Set proper risk management and watch for trend development.';
+      tradingAdvice = 'Lower risk signal. Keep watching trend quality.';
       break;
     default:
       tradingAdvice = 'Proceed with caution and monitor closely.';
@@ -228,10 +228,10 @@ export interface Layer3AIResult {
   short_comment: string;
 }
 
-// Layer 3: Qualitative AI Analysis with Gemini 1.5 Flash (Updated for browser context)
+// Layer 3: legacy qualitative source analysis.
 export async function analyzeWithLayer3AI(input: Layer3AnalysisInput): Promise<Layer3AIResult | null> {
   if (!GEMINI_API_KEY) {
-    console.warn('Gemini API key not found, returning default Layer 3 analysis');
+    console.warn('AI key not found, returning deterministic Layer 3 analysis');
     return getDefaultLayer3Analysis(input);
   }
 
@@ -284,7 +284,7 @@ OUTPUT: JSON only with these exact keys:
   } catch (error) {
     console.error('Error getting Layer 3 AI analysis:', error);
     // Provide detailed error for debugging
-    console.error('Gemini Layer 3 error details:', {
+    console.error('Layer 3 provider error details:', {
       message: error.message,
       symbol: input.symbol,
       inputData: input
@@ -303,16 +303,16 @@ function getDefaultLayer3Analysis(input: Layer3AnalysisInput): Layer3AIResult {
   if (input.baseRiskScore >= 70) {
     verdict = 'High risk warning';
     likely_scenario = input.isThin ? 'Thin orderbook trap' : 'Whale manipulation suspected';
-    short_comment = 'Avoid FOMO entries';
+    short_comment = 'Wait for cleaner confirmation';
     adjustedScore = Math.min(100, adjustedScore + 5); // Slight upward adjustment for caution
   } else if (input.baseRiskScore >= 40) {
     verdict = 'Moderate opportunity';
     likely_scenario = 'Balanced market movement';
-    short_comment = 'Enter with proper risk management';
+    short_comment = 'Watch for confirmation';
   } else {
     verdict = 'Lower risk opportunity';
     likely_scenario = 'Healthy market traction';
-    short_comment = 'Favorable entry conditions';
+    short_comment = 'Lower risk signal';
     adjustedScore = Math.max(0, adjustedScore - 3); // Slight downward adjustment
   }
 

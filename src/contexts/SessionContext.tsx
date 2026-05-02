@@ -28,6 +28,21 @@ export const SessionContextProvider = ({ children }: { children: ReactNode }) =>
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const touch = () => {
+      void supabase
+        .from('profiles')
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq('id', session.user.id);
+    };
+
+    touch();
+    const interval = window.setInterval(touch, 60_000);
+    return () => window.clearInterval(interval);
+  }, [session?.user?.id]);
+
   const value = {
     session,
     loading,

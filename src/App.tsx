@@ -5,22 +5,28 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, BrowserRouter } from "react-router-dom";
 import { SessionContextProvider } from "./contexts/SessionContext";
+import LanguageProvider from "./contexts/LanguageContext";
 import { ThemeProvider } from "./components/ThemeProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HelmetProvider } from 'react-helmet-async';
 
 // Lazy load pages for better performance
 const Index = lazy(() => import("./pages/Index"));
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const CoinAnalysis = lazy(() => import("./pages/CoinAnalysis"));
 const ConfirmEmail = lazy(() => import("./pages/ConfirmEmail"));
+const VerifyOtp = lazy(() => import("./pages/VerifyOtp"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const About = lazy(() => import("./pages/About"));
 const Contact = lazy(() => import("./pages/Contact"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
+const PaymentResult = lazy(() => import("./pages/PaymentResult"));
+const Admin = lazy(() => import("./pages/Admin"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,22 +65,9 @@ const LoadingFallback = () => (
   </div>
 );
 
-import { HelmetProvider } from 'react-helmet-async';
-
-// Debug component to check environment variables
-const EnvDebug = () => {
-  console.log('Environment Variables Check:');
-  console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL);
-  console.log('VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Present' : 'Missing');
-  console.log('VITE_GEMINI_API_KEY:', import.meta.env.VITE_GEMINI_API_KEY ? 'Present' : 'Missing');
-
-  return null;
-};
-
 const App = () => (
   <ErrorBoundary>
     <HelmetProvider>
-      <EnvDebug />
       <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
@@ -82,26 +75,34 @@ const App = () => (
         <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
           <BrowserRouter>
             <SessionContextProvider>
-              <Suspense fallback={<LoadingFallback />}>
-                <Routes>
+              <LanguageProvider>
+                <Suspense fallback={<LoadingFallback />}>
+                  <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/confirm-email" element={<ConfirmEmail />} />
+                  <Route path="/verify-otp" element={<VerifyOtp />} />
                   <Route path="/pricing" element={<Pricing />} />
                   <Route path="/about" element={<About />} />
                   <Route path="/contact" element={<Contact />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/admin" element={<Admin />} />
 
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
                     <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/analysis" element={<CoinAnalysis />} />
+                    <Route path="/analysis/:symbol" element={<CoinAnalysis />} />
+                    <Route path="/payment/success" element={<PaymentResult />} />
+                    <Route path="/payment/cancel" element={<PaymentResult />} />
                   </Route>
 
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Suspense>
+                  </Routes>
+                </Suspense>
+              </LanguageProvider>
             </SessionContextProvider>
           </BrowserRouter>
         </ThemeProvider>
