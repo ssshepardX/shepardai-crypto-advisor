@@ -45,16 +45,24 @@ const Login = () => {
       return;
     }
 
-    const { error } = await supabase.auth.signUp({
-      email,
+    const cleanEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
       password,
+      options: {
+        emailRedirectTo: `${appUrl}/confirm-email`,
+      },
     });
     setLoading(false);
     if (error) {
       setError(error.message);
       return;
     }
-    navigate(`/verify-otp?email=${encodeURIComponent(email)}&type=signup`);
+    if (data.session) {
+      navigate(nextPath, { replace: true });
+      return;
+    }
+    navigate(`/verify-otp?email=${encodeURIComponent(cleanEmail)}&type=signup`);
   };
 
   const signInWithGoogle = async () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,6 +14,7 @@ const VerifyOtp = () => {
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const autoSentRef = useRef(false);
 
   const verify = async () => {
     setLoading(true);
@@ -41,6 +42,18 @@ const VerifyOtp = () => {
     setLoading(false);
     setStatus(error ? error.message : 'New code sent.');
   };
+
+  useEffect(() => {
+    if (autoSentRef.current || !initialEmail) return;
+    autoSentRef.current = true;
+    const sendInitialCode = async () => {
+      setStatus('Sending verification code...');
+      const cleanEmail = initialEmail.trim().toLowerCase();
+      const { error } = await supabase.auth.resend({ type: 'signup', email: cleanEmail });
+      setStatus(error ? error.message : 'Verification code sent. Check your inbox and spam folder.');
+    };
+    void sendInitialCode();
+  }, [initialEmail]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-4">
