@@ -52,9 +52,28 @@ export const PLAN_ENTITLEMENTS: Record<PlanId, PlanEntitlements> = {
   },
 };
 
+function isAdminEmail(email: string | null | undefined) {
+  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
+  return Boolean(adminEmail && email?.trim().toLowerCase() === adminEmail);
+}
+
+function adminSubscription(userId: string): UserSubscription {
+  return {
+    id: 'admin-override',
+    user_id: userId,
+    plan: 'trader',
+    interval: 'yearly',
+    status: 'admin',
+    active: true,
+    current_period_end: null,
+    cancel_at_period_end: false,
+  };
+}
+
 export async function getCurrentSubscription(): Promise<UserSubscription> {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (userError || !user) throw new Error('User not authenticated');
+  if (isAdminEmail(user.email)) return adminSubscription(user.id);
 
   const { data, error } = await supabase
     .from('user_subscriptions')

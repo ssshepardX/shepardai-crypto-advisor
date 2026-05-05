@@ -133,6 +133,7 @@ class ApiError extends Error {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const adminEmail = (Deno.env.get("ADMIN_EMAIL") || "").trim().toLowerCase();
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -162,6 +163,10 @@ function normalizePlan(plan: string | null | undefined): PlanId {
   return "free";
 }
 
+function isAdminUser(email: string | null | undefined) {
+  return Boolean(adminEmail && email?.trim().toLowerCase() === adminEmail);
+}
+
 function normalizeLanguage(value: unknown): OutputLanguage {
   return SUPPORTED_LANGUAGES.includes(value as OutputLanguage) ? value as OutputLanguage : "tr";
 }
@@ -186,6 +191,16 @@ async function getAuthContext(req: Request): Promise<AuthContext> {
     throw new ApiError(401, "AUTH_INVALID", "Oturum dogrulanamadi.");
   }
 
+  const email = data.user.email || null;
+  if (isAdminUser(email)) {
+    return {
+      userId: data.user.id,
+      email,
+      plan: "trader",
+      entitlement: ENTITLEMENTS.trader,
+    };
+  }
+
   const { data: subscription } = await supabase
     .from("user_subscriptions")
     .select("plan")
@@ -199,7 +214,7 @@ async function getAuthContext(req: Request): Promise<AuthContext> {
   const plan = normalizePlan(subscription?.plan);
   return {
     userId: data.user.id,
-    email: data.user.email || null,
+    email,
     plan,
     entitlement: ENTITLEMENTS[plan],
   };
