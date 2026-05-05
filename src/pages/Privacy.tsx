@@ -159,7 +159,7 @@ const Privacy = () => {
                     <li>Data portability</li>
                   </ul>
                   <p className="text-muted-foreground">
-                    To exercise these rights, please contact us at privacy@shepardai.com
+                    To exercise these rights, please contact us at support@shepardai.pro
                   </p>
                 </div>
               </CardContent>
@@ -183,7 +183,7 @@ const Privacy = () => {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  If you have any questions about this Privacy Policy, please contact us at privacy@shepardai.com
+                  If you have any questions about this Privacy Policy, please contact us at support@shepardai.pro
                 </p>
               </CardContent>
             </Card>

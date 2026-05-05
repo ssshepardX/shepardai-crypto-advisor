@@ -146,7 +146,7 @@ const Terms = () => {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  If you have any questions about these Terms of Service, please contact us at legal@shepardai.com
+                  If you have any questions about these Terms of Service, please contact us at support@shepardai.pro
                 </p>
               </CardContent>
             </Card>

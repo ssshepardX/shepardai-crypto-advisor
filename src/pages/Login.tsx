@@ -40,9 +40,6 @@ const Login = () => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/confirm-email`,
-      },
     });
     setLoading(false);
     if (error) {

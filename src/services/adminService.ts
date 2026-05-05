@@ -35,7 +35,14 @@ export type ContactMessage = {
 };
 
 async function callAdmin<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('admin-api', { method: 'POST', body });
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Admin session missing');
+
+  const { data, error } = await supabase.functions.invoke('admin-api', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body,
+  });
   if (error) {
     const context = 'context' in error ? error.context : null;
     if (context instanceof Response) {

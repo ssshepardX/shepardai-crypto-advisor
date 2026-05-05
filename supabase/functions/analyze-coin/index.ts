@@ -14,7 +14,7 @@ const GEMINI_MODELS = [
   "gemini-2.0-flash-lite",
 ] as const;
 const OPENROUTER_MODEL = "openrouter/free";
-const SUPPORTED_LANGUAGES = ["tr", "en", "de", "es", "fr", "ar", "ru"] as const;
+const SUPPORTED_LANGUAGES = ["tr", "en"] as const;
 type Timeframe = typeof TIMEFRAMES[number];
 type OutputLanguage = typeof SUPPORTED_LANGUAGES[number];
 

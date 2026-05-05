@@ -37,6 +37,7 @@ const Contact = () => {
           <CardTitle><Trans text="Contact form" /></CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <p className="text-sm text-slate-400">Business email: support@shepardai.pro</p>
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Name" className="border-slate-700 bg-slate-950" />
           <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email" className="border-slate-700 bg-slate-950" />
           <Select value={form.satisfaction} onValueChange={(value) => setForm({ ...form, satisfaction: value })}>

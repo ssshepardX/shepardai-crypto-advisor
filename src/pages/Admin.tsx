@@ -12,7 +12,7 @@ import { useSession } from '@/contexts/SessionContext';
 import { AdminUser, ContactMessage, getAdminData, setMessageStatus, setUserSubscription } from '@/services/adminService';
 import { Trans } from '@/contexts/LanguageContext';
 
-const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
+const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
 
 const AdminLogin = () => {
   const [email, setEmail] = useState(ADMIN_EMAIL);
@@ -22,7 +22,11 @@ const AdminLogin = () => {
   const navigate = useNavigate();
 
   const submit = async () => {
-    if (ADMIN_EMAIL && email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    if (!ADMIN_EMAIL) {
+      setError('VITE_ADMIN_EMAIL is missing');
+      return;
+    }
+    if (email.trim().toLowerCase() !== ADMIN_EMAIL) {
       setError('Admin email not allowed');
       return;
     }
@@ -159,8 +163,9 @@ const AdminPanel = () => {
 const Admin = () => {
   const { session, loading } = useSession();
   if (loading) return null;
+  if (!ADMIN_EMAIL) return <AdminLogin />;
   if (!session) return <AdminLogin />;
-  if (ADMIN_EMAIL && session.user.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) return <Navigate to="/" replace />;
+  if (session.user.email?.trim().toLowerCase() !== ADMIN_EMAIL) return <Navigate to="/" replace />;
   return <AdminPanel />;
 };
 

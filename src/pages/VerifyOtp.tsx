@@ -18,8 +18,9 @@ const VerifyOtp = () => {
   const verify = async () => {
     setLoading(true);
     setStatus(null);
+    const cleanEmail = email.trim().toLowerCase();
     const { error } = await supabase.auth.verifyOtp({
-      email,
+      email: cleanEmail,
       token: code.trim(),
       type: 'signup',
     });
@@ -28,13 +29,15 @@ const VerifyOtp = () => {
       setStatus(error.message);
       return;
     }
+    await supabase.auth.getSession();
     navigate('/dashboard', { replace: true });
   };
 
   const resend = async () => {
     setLoading(true);
     setStatus(null);
-    const { error } = await supabase.auth.resend({ type: 'signup', email });
+    const cleanEmail = email.trim().toLowerCase();
+    const { error } = await supabase.auth.resend({ type: 'signup', email: cleanEmail });
     setLoading(false);
     setStatus(error ? error.message : 'New code sent.');
   };
