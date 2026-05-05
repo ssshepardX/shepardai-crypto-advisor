@@ -87,7 +87,6 @@ const App = () => (
                   <Route path="/contact" element={<Contact />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/privacy" element={<Privacy />} />
-                  <Route path="/admin" element={<Admin />} />
 
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
@@ -96,6 +95,7 @@ const App = () => (
                     <Route path="/analysis/:symbol" element={<CoinAnalysis />} />
                     <Route path="/payment/success" element={<PaymentResult />} />
                     <Route path="/payment/cancel" element={<PaymentResult />} />
+                    <Route path="/admin" element={<Admin />} />
                   </Route>
 
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -1,8 +1,117 @@
--- Create analysis_jobs table for the new queue-based architecture
+-- =====================================================
+-- Shepard Advisor — Complete Database Schema
+-- Run this in the Supabase SQL Editor
+-- =====================================================
+
+-- 1. PROFILES (touched by SessionContext every 60s)
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL DEFAULT 'user', -- 'user', 'admin'
+    last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+
+-- Auto-create profile on signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, role) VALUES (NEW.id, 'user')
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- 2. USER SUBSCRIPTIONS
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    plan VARCHAR(20) NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'trader')),
+    interval VARCHAR(20) NOT NULL DEFAULT 'monthly' CHECK (interval IN ('monthly', 'quarterly', 'yearly')),
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    active BOOLEAN NOT NULL DEFAULT true,
+    current_period_end TIMESTAMP WITH TIME ZONE,
+    cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
+    stripe_subscription_id VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_id ON user_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_active ON user_subscriptions(user_id, active);
+
+ALTER TABLE user_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own subscriptions" ON user_subscriptions FOR SELECT USING (auth.uid() = user_id);
+
+-- 3. USER USAGE DAILY (rate limiting)
+CREATE TABLE IF NOT EXISTS user_usage_daily (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    ai_analysis_count INTEGER NOT NULL DEFAULT 0,
+    scanner_run_count INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(user_id, usage_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_usage_daily_lookup ON user_usage_daily(user_id, usage_date);
+
+ALTER TABLE user_usage_daily ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own usage" ON user_usage_daily FOR SELECT USING (auth.uid() = user_id);
+
+-- 4. COIN ANALYSES (main analysis results from Edge Function)
+CREATE TABLE IF NOT EXISTS coin_analyses (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    price DECIMAL(20,8) NOT NULL,
+    indicator_json JSONB NOT NULL,
+    risk_json JSONB NOT NULL,
+    social_json JSONB,
+    ai_summary_json JSONB,
+    cause_json JSONB,
+    market_microstructure_json JSONB,
+    news_json JSONB,
+    confidence_json JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_coin_analyses_symbol ON coin_analyses(symbol, timeframe);
+CREATE INDEX IF NOT EXISTS idx_coin_analyses_expires ON coin_analyses(expires_at);
+CREATE INDEX IF NOT EXISTS idx_coin_analyses_created ON coin_analyses(created_at DESC);
+
+-- Allow Edge Functions (service role) full access; no RLS needed for server-only table
+ALTER TABLE coin_analyses DISABLE ROW LEVEL SECURITY;
+
+-- 5. CONTACT MESSAGES
+CREATE TABLE IF NOT EXISTS contact_messages (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    name VARCHAR(200),
+    email VARCHAR(255),
+    satisfaction VARCHAR(20) CHECK (satisfaction IN ('happy', 'neutral', 'unhappy')),
+    subject VARCHAR(500) NOT NULL,
+    message TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'read', 'closed')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE contact_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can insert contact messages" ON contact_messages FOR INSERT WITH CHECK (true);
+
+-- 6. ANALYSIS JOBS (legacy queue — kept for reference / future use)
 CREATE TABLE IF NOT EXISTS analysis_jobs (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING, PROCESSING, COMPLETED, FAILED, CACHED
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     price_at_detection DECIMAL(20,8) NOT NULL,
     price_change DECIMAL(10,4) NOT NULL,
     volume_spike DECIMAL(10,4) NOT NULL,
@@ -17,151 +126,48 @@ CREATE TABLE IF NOT EXISTS analysis_jobs (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Add indexes for performance
 CREATE INDEX IF NOT EXISTS idx_analysis_jobs_status ON analysis_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_analysis_jobs_symbol ON analysis_jobs(symbol);
-CREATE INDEX IF NOT EXISTS idx_analysis_jobs_created_at ON analysis_jobs(created_at);
-CREATE INDEX IF NOT EXISTS idx_analysis_jobs_symbol_created ON analysis_jobs(symbol, created_at);
 
--- Update pump_alerts table to include new columns (if they don't exist)
-ALTER TABLE pump_alerts
-ADD COLUMN IF NOT EXISTS volume_24h_change DECIMAL(10,4),
-ADD COLUMN IF NOT EXISTS market_cap DECIMAL(20,2),
-ADD COLUMN IF NOT EXISTS orderbook_depth DECIMAL(20,2),
-ADD COLUMN IF NOT EXISTS risk_score INTEGER,
-ADD COLUMN IF NOT EXISTS likely_source VARCHAR(100),
-ADD COLUMN IF NOT EXISTS actionable_insight TEXT;
+ALTER TABLE analysis_jobs DISABLE ROW LEVEL SECURITY;
 
--- Create user_subscriptions table for subscription management
-CREATE TABLE IF NOT EXISTS user_subscriptions (
+-- 7. PUMP ALERTS (legacy alerts — kept for reference / future use)
+CREATE TABLE IF NOT EXISTS pump_alerts (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    plan VARCHAR(20) NOT NULL DEFAULT 'free', -- 'free', 'insighter', 'analyzer'
-    active BOOLEAN NOT NULL DEFAULT true,
-    stripe_subscription_id VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(user_id, active) -- Only one active subscription per user
+    symbol VARCHAR(20) NOT NULL,
+    type VARCHAR(50),
+    price DECIMAL(20,8),
+    price_change DECIMAL(10,4),
+    volume DECIMAL(20,4),
+    avg_volume DECIMAL(20,4),
+    volume_multiplier DECIMAL(10,4),
+    detected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    market_state VARCHAR(50),
+    orderbook_depth DECIMAL(20,2),
+    ai_comment JSONB,
+    ai_fetched_at TIMESTAMP WITH TIME ZONE,
+    risk_score INTEGER,
+    likely_source VARCHAR(100),
+    actionable_insight TEXT,
+    organic_probability INTEGER,
+    risk_analysis TEXT,
+    whale_movement BOOLEAN DEFAULT false
 );
 
--- Add indexes for performance
-CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_id ON user_subscriptions(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_subscriptions_plan ON user_subscriptions(plan);
+ALTER TABLE pump_alerts DISABLE ROW LEVEL SECURITY;
 
--- Create a view for active analysis results (for UI display)
-CREATE OR REPLACE VIEW active_analysis AS
-SELECT
-    pa.*,
-    aj.status as job_status,
-    aj.created_at as job_created_at,
-    aj.completed_at as job_completed_at
-FROM pump_alerts pa
-LEFT JOIN analysis_jobs aj ON aj.symbol = pa.symbol
-    AND aj.created_at >= pa.detected_at - INTERVAL '1 minute'
-    AND aj.created_at <= pa.detected_at + INTERVAL '1 minute'
-WHERE pa.type = 'AI_ANALYSIS'
-    AND pa.detected_at >= NOW() - INTERVAL '24 hours'
-ORDER BY pa.detected_at DESC;
-
--- Create a function to clean up old analysis jobs
-CREATE OR REPLACE FUNCTION cleanup_old_analysis_jobs()
+-- 8. Cleanup function for expired analyses
+CREATE OR REPLACE FUNCTION cleanup_expired_analyses()
 RETURNS INTEGER AS $$
 DECLARE
     deleted_count INTEGER;
 BEGIN
-    -- Delete jobs older than 7 days
-    DELETE FROM analysis_jobs
-    WHERE created_at < NOW() - INTERVAL '7 days';
-
+    DELETE FROM coin_analyses WHERE expires_at < NOW() - INTERVAL '24 hours';
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
     RETURN deleted_count;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create a function to get pending job count
-CREATE OR REPLACE FUNCTION get_pending_job_count()
-RETURNS INTEGER AS $$
-DECLARE
-    job_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO job_count
-    FROM analysis_jobs
-    WHERE status = 'PENDING';
-
-    RETURN job_count;
-END;
-$$ LANGUAGE plpgsql;
-
--- Supabase RPC for atomically finding and locking a pending job
--- This prevents multiple workers from processing the same job.
-CREATE OR REPLACE FUNCTION find_and_lock_job()
-RETURNS TABLE (
-  id uuid,
-  symbol VARCHAR(20),
-  status VARCHAR(20),
-  price_at_detection DECIMAL(20,8),
-  price_change DECIMAL(10,4),
-  volume_spike DECIMAL(10,4),
-  orderbook_json JSONB,
-  social_json JSONB,
-  created_at TIMESTAMP WITH TIME ZONE
-) AS $$
-DECLARE
-  job_id uuid;
-BEGIN
-  -- Find the oldest pending job and lock the row
-  SELECT j.id INTO job_id
-  FROM analysis_jobs AS j
-  WHERE j.status = 'PENDING'
-  ORDER BY j.created_at ASC
-  LIMIT 1
-  FOR UPDATE SKIP LOCKED;
-
-  -- If a job was found, update its status to 'PROCESSING'
-  IF job_id IS NOT NULL THEN
-    UPDATE analysis_jobs
-    SET status = 'PROCESSING'
-    WHERE analysis_jobs.id = job_id;
-
-    -- Return the locked and updated job
-    RETURN QUERY
-    SELECT
-      j.id,
-      j.symbol,
-      j.status,
-      j.price_at_detection,
-      j.price_change,
-      j.volume_spike,
-      j.orderbook_json,
-      j.social_json,
-      j.created_at
-    FROM analysis_jobs AS j
-    WHERE j.id = job_id;
-  ELSE
-    -- No pending job found
-    RETURN;
-  END IF;
-END;
-$$ LANGUAGE plpgsql;
-
--- =====================================================
--- CRITICAL FIXES FOR PRODUCTION SYSTEM
--- =====================================================
-
--- 1. FORCE DISABLE RLS (this is the key fix)
-ALTER TABLE analysis_jobs DISABLE ROW LEVEL SECURITY;
-
--- 2. DROP existing policies if they exist
-DROP POLICY IF EXISTS "Users can view their own analysis jobs" ON analysis_jobs;
-DROP POLICY IF EXISTS "Service role can manage analysis jobs" ON analysis_jobs;
-
--- 3. FIX pump_alerts constraints
+-- 9. Fix any existing constraint issues
 ALTER TABLE pump_alerts ALTER COLUMN avg_volume DROP NOT NULL;
 ALTER TABLE pump_alerts ALTER COLUMN volume DROP NOT NULL;
-
--- 4. VERIFY table exists and is accessible
-SELECT 'analysis_jobs table exists' as status, COUNT(*) as record_count FROM analysis_jobs;
-
--- 5. Test insert (should work after RLS is disabled)
--- INSERT INTO analysis_jobs (symbol, status, price_at_detection, price_change, volume_spike, orderbook_json, social_json)
--- VALUES ('TEST', 'PENDING', 50000, 5.0, 3.0, '{}', '{}');

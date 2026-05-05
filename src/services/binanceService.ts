@@ -1,4 +1,4 @@
-// Binance API Service for Market Data and Pump Detection
+// Binance API Service — used by RealMarketChart, CoinAnalysis, LivePriceTicker, TrendingCoins
 
 export interface BinanceKline {
   openTime: number;
@@ -33,7 +33,6 @@ export async function getTop200CoinsByVolume(): Promise<CoinData[]> {
     
     const data = await response.json();
     
-    // Filter USDT pairs and sort by quote volume
     interface BinanceTicker {
       symbol: string;
       lastPrice: string;
@@ -97,104 +96,4 @@ export async function getBinanceKlines(
     console.error(`Error fetching klines for ${symbol}:`, error);
     return [];
   }
-}
-
-// Calculate average volume from klines
-export function calculateAverageVolume(klines: BinanceKline[], period: number = 20): number {
-  if (klines.length < period) {
-    return 0;
-  }
-  
-  const recentKlines = klines.slice(-period - 1, -1); // Exclude last candle
-  const totalVolume = recentKlines.reduce(
-    (sum, kline) => sum + parseFloat(kline.quoteVolume), 
-    0
-  );
-  
-  return totalVolume / period;
-}
-
-// Calculate price change percentage
-export function calculatePriceChange(klines: BinanceKline[]): number {
-  if (klines.length < 2) {
-    return 0;
-  }
-  
-  const lastKline = klines[klines.length - 1];
-  const openPrice = parseFloat(lastKline.open);
-  const closePrice = parseFloat(lastKline.close);
-  
-  return ((closePrice - openPrice) / openPrice) * 100;
-}
-
-// Detect pump conditions
-export interface PumpDetectionResult {
-  isPump: boolean;
-  symbol: string;
-  price: number;
-  priceChange: number;
-  volume: number;
-  avgVolume: number;
-  volumeMultiplier: number;
-}
-
-export async function detectPump(
-  symbol: string, 
-  volumeMultiplierThreshold: number = 2.5,
-  priceChangeThreshold: number = 3.0
-): Promise<PumpDetectionResult | null> {
-  try {
-    const klines = await getBinanceKlines(symbol, '1m', 30);
-    
-    if (klines.length < 21) {
-      return null;
-    }
-    
-    const lastKline = klines[klines.length - 1];
-    const currentVolume = parseFloat(lastKline.quoteVolume);
-    const avgVolume = calculateAverageVolume(klines, 20);
-    const priceChange = calculatePriceChange(klines);
-    const volumeMultiplier = avgVolume > 0 ? currentVolume / avgVolume : 0;
-    
-    const isPump = 
-      priceChange > priceChangeThreshold && 
-      volumeMultiplier > volumeMultiplierThreshold;
-    
-    return {
-      isPump,
-      symbol,
-      price: parseFloat(lastKline.close),
-      priceChange,
-      volume: currentVolume,
-      avgVolume,
-      volumeMultiplier
-    };
-  } catch (error) {
-    console.error(`Error detecting pump for ${symbol}:`, error);
-    return null;
-  }
-}
-
-// Batch process multiple coins for pump detection
-export async function scanCoinsForPumps(
-  coins: string[],
-  volumeMultiplierThreshold: number = 2.5,
-  priceChangeThreshold: number = 3.0,
-  delayMs: number = 300
-): Promise<PumpDetectionResult[]> {
-  const results: PumpDetectionResult[] = [];
-  
-  for (const coin of coins) {
-    const result = await detectPump(coin, volumeMultiplierThreshold, priceChangeThreshold);
-    
-    if (result && result.isPump) {
-      results.push(result);
-      console.log(`Pump detected: ${coin} +${result.priceChange.toFixed(2)}% Vol: ${result.volumeMultiplier.toFixed(2)}x`);
-    }
-    
-    // Add delay to avoid rate limits
-    await new Promise(resolve => setTimeout(resolve, delayMs));
-  }
-  
-  return results;
 }
