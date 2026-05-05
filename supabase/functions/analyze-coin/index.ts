@@ -133,7 +133,10 @@ class ApiError extends Error {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const adminEmail = (Deno.env.get("ADMIN_EMAIL") || "").trim().toLowerCase();
+const adminEmails = `${Deno.env.get("ADMIN_EMAIL") || ""},${Deno.env.get("ADMIN_EMAILS") || ""}`
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -164,7 +167,8 @@ function normalizePlan(plan: string | null | undefined): PlanId {
 }
 
 function isAdminUser(email: string | null | undefined) {
-  return Boolean(adminEmail && email?.trim().toLowerCase() === adminEmail);
+  const normalized = email?.trim().toLowerCase();
+  return Boolean(normalized && adminEmails.includes(normalized));
 }
 
 function normalizeLanguage(value: unknown): OutputLanguage {

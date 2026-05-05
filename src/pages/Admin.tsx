@@ -11,22 +11,24 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { AdminUser, ContactMessage, getAdminData, setMessageStatus, setUserSubscription } from '@/services/adminService';
 import { Trans } from '@/contexts/LanguageContext';
+import { getAdminEmails, isAdminEmail } from '@/lib/admin';
 
-const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
+const ADMIN_EMAILS = getAdminEmails();
+const PRIMARY_ADMIN_EMAIL = ADMIN_EMAILS[0] || '';
 
 const AdminLogin = () => {
-  const [email, setEmail] = useState(ADMIN_EMAIL);
+  const [email, setEmail] = useState(PRIMARY_ADMIN_EMAIL);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const submit = async () => {
-    if (!ADMIN_EMAIL) {
+    if (!PRIMARY_ADMIN_EMAIL) {
       setError('VITE_ADMIN_EMAIL is missing');
       return;
     }
-    if (email.trim().toLowerCase() !== ADMIN_EMAIL) {
+    if (!isAdminEmail(email)) {
       setError('Admin email not allowed');
       return;
     }
@@ -163,9 +165,9 @@ const AdminPanel = () => {
 const Admin = () => {
   const { session, loading } = useSession();
   if (loading) return null;
-  if (!ADMIN_EMAIL) return <AdminLogin />;
+  if (!PRIMARY_ADMIN_EMAIL) return <AdminLogin />;
   if (!session) return <AdminLogin />;
-  if (session.user.email?.trim().toLowerCase() !== ADMIN_EMAIL) return <Navigate to="/" replace />;
+  if (!isAdminEmail(session.user.email)) return <Navigate to="/" replace />;
   return <AdminPanel />;
 };
 

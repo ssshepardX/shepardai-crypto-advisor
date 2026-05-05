@@ -8,7 +8,10 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const adminEmail = (Deno.env.get("ADMIN_EMAIL") || "").trim().toLowerCase();
+const adminEmails = `${Deno.env.get("ADMIN_EMAIL") || ""},${Deno.env.get("ADMIN_EMAILS") || ""}`
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 const supabase = createClient(supabaseUrl, serviceKey);
 
 function json(body: unknown, status = 200) {
@@ -27,7 +30,8 @@ async function getUser(req: Request) {
 }
 
 function isAdminEmail(email?: string | null) {
-  return Boolean(adminEmail && email?.trim().toLowerCase() === adminEmail);
+  const normalized = email?.trim().toLowerCase();
+  return Boolean(normalized && adminEmails.includes(normalized));
 }
 
 async function listAdminData() {
@@ -85,7 +89,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!supabaseUrl || !serviceKey) return json({ error: "Supabase service env missing" }, 500);
-  if (!adminEmail) return json({ error: "ADMIN_EMAIL missing" }, 500);
+  if (adminEmails.length === 0) return json({ error: "ADMIN_EMAIL missing" }, 500);
 
   const user = await getUser(req);
   if (!user) return json({ error: "Unauthorized" }, 401);

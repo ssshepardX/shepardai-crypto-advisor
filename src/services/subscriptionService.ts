@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { isAdminEmail } from '@/lib/admin';
 
 export type PlanId = 'free' | 'pro' | 'trader';
 export type BillingInterval = 'monthly' | 'quarterly' | 'yearly';
@@ -51,11 +52,6 @@ export const PLAN_ENTITLEMENTS: Record<PlanId, PlanEntitlements> = {
     canViewAiSummary: true,
   },
 };
-
-function isAdminEmail(email: string | null | undefined) {
-  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
-  return Boolean(adminEmail && email?.trim().toLowerCase() === adminEmail);
-}
 
 function adminSubscription(userId: string): UserSubscription {
   return {

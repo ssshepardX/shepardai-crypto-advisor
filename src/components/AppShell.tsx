@@ -1,10 +1,11 @@
 import { ReactNode, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BarChart3, Brain, CreditCard, LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
+import { BarChart3, Brain, CreditCard, LayoutDashboard, LogOut, Menu, Shield, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLanguage, Trans, useLanguage } from '@/contexts/LanguageContext';
+import { isAdminEmail } from '@/lib/admin';
 
 interface AppShellProps {
   title: string;
@@ -18,6 +19,7 @@ const AppShell = ({ title, subtitle, children, action }: AppShellProps) => {
   const { language, languages, setLanguage } = useLanguage();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isAdmin = isAdminEmail(session?.user?.email);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -30,6 +32,7 @@ const AppShell = ({ title, subtitle, children, action }: AppShellProps) => {
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/analysis', icon: BarChart3, label: 'Market lab' },
     { to: '/pricing', icon: CreditCard, label: 'Pricing' },
+    ...(isAdmin ? [{ to: '/admin', icon: Shield, label: 'Admin' }] : []),
   ];
 
   return (
@@ -60,6 +63,14 @@ const AppShell = ({ title, subtitle, children, action }: AppShellProps) => {
           </div>
 
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button asChild size="sm" variant="outline" className="hidden border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15 md:inline-flex">
+                <Link to="/admin">
+                  <Shield className="mr-2 h-4 w-4" />
+                  Admin
+                </Link>
+              </Button>
+            )}
             {action}
             <select
               value={language}
