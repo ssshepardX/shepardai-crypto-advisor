@@ -40,7 +40,7 @@ const AppShell = ({ title, subtitle, children, action }: AppShellProps) => {
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(8,145,178,0.12),transparent_35%),linear-gradient(135deg,#020617,#0f172a_55%,#09090b)]" />
       <nav className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <Link to={session ? '/dashboard' : '/'} className="flex items-center gap-3" onClick={closeMenu}>
+          <Link to="/" className="flex items-center gap-3" onClick={closeMenu}>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-500/15 ring-1 ring-cyan-400/30">
               <Brain className="h-5 w-5 text-cyan-300" />
             </div>

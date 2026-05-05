@@ -21,14 +21,15 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const hasExplicitNext = searchParams.has('next');
   const nextPath = (() => {
     const requested = searchParams.get('next') || '/dashboard';
     return requested.startsWith('/') && !requested.startsWith('//') ? requested : '/dashboard';
   })();
 
   useEffect(() => {
-    if (!sessionLoading && session) navigate(nextPath, { replace: true });
-  }, [session, sessionLoading, navigate, nextPath]);
+    if (!sessionLoading && session && hasExplicitNext) navigate(nextPath, { replace: true });
+  }, [session, sessionLoading, navigate, nextPath, hasExplicitNext]);
 
   const submit = async () => {
     setLoading(true);

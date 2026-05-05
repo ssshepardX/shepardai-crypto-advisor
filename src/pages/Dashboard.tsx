@@ -4,7 +4,7 @@ import { Activity, BarChart3, Brain, Clock, RefreshCw, ShieldAlert, Zap } from '
 import AppShell from '@/components/AppShell';
 import ScanningCard from '@/components/ScanningCard';
 import { AlertData, getAlerts } from '@/services/alertsApi';
-import { CoinAnalysis, getRecentAnalyses, scanMarket } from '@/services/coinAnalysisService';
+import { CoinAnalysis, CoinAnalysisError, getRecentAnalyses, scanMarket } from '@/services/coinAnalysisService';
 import {
   getCurrentSubscription,
   getTodayUsage,
@@ -74,9 +74,13 @@ const DashboardPage = () => {
       setRecentAnalyses(analyses);
       const today = await getTodayUsage();
       setUsage(today);
-      setMessage('Market scan complete.');
+      setMessage(analyses.length ? 'Market scan complete.' : 'Market scan complete. No high-signal movement found right now.');
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Market scan could not be completed.');
+      if (err instanceof CoinAnalysisError && err.code === 'SCANNER_REQUIRES_TRADER') {
+        setMessage('Manual market scanner is available on Trader. Admin accounts also get Trader access after deploy.');
+      } else {
+        setMessage(err instanceof Error ? err.message : 'Market scan could not be completed.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -187,6 +191,8 @@ const DashboardPage = () => {
                     likely_cause: analysis.cause_json?.likely_cause,
                     confidence: analysis.cause_json?.confidence_score,
                     early_warning: analysis.cause_json?.early_warning_score,
+                    ai_source: analysis.ai_summary_json.source,
+                    ai_fallback_reason: analysis.ai_summary_json.fallback_reason,
                   }}
                 />
               </Link>
@@ -212,6 +218,8 @@ const DashboardPage = () => {
                     price_change: scan.price_change || 0,
                     volume_spike: scan.volume_spike || 1,
                     summary: scan.summary || 'Scanner signal',
+                    ai_source: 'legacy_scanner',
+                    ai_fallback_reason: null,
                   }}
                 />
               </Link>

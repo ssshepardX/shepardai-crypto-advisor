@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/contexts/SessionContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,7 +9,10 @@ import { Trans } from "@/contexts/LanguageContext";
 const Navbar = () => {
   const { session } = useSession();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const currentPath = `${location.pathname}${location.search}`;
+  const loginPath = `/login?next=${encodeURIComponent(currentPath)}`;
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -19,6 +22,7 @@ const Navbar = () => {
   const closeMenu = () => setMobileOpen(false);
 
   const navLinks = [
+    ...(session ? [{ to: "/dashboard", label: "Dashboard" }] : []),
     { to: "/pricing", label: "Pricing" },
     { to: "/about", label: "About" },
     { to: "/contact", label: "Contact" },
@@ -50,17 +54,14 @@ const Navbar = () => {
         <div className="hidden md:flex items-center space-x-4">
           {session ? (
             <>
-              <Link to="/dashboard">
-                <Button variant="ghost"><Trans text="Dashboard" /></Button>
-              </Link>
               <Button onClick={handleLogout}><Trans text="Log out" /></Button>
             </>
           ) : (
             <>
-              <Link to="/login">
+              <Link to={loginPath}>
                 <Button variant="ghost"><Trans text="Log in" /></Button>
               </Link>
-              <Link to="/login">
+              <Link to={loginPath}>
                 <Button className="bg-cyan-500 hover:bg-cyan-600">Sign Up</Button>
               </Link>
             </>
@@ -98,7 +99,7 @@ const Navbar = () => {
               </>
             ) : (
               <>
-                <Link to="/login" onClick={closeMenu}>
+                <Link to={loginPath} onClick={closeMenu}>
                   <Button className="w-full bg-cyan-500 hover:bg-cyan-600"><Trans text="Log in" /></Button>
                 </Link>
               </>

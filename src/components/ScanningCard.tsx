@@ -13,6 +13,8 @@ interface RealData {
   likely_cause?: string;
   confidence?: number;
   early_warning?: number;
+  ai_source?: string;
+  ai_fallback_reason?: string | null;
 }
 
 const ScanningCard: React.FC<{ realData: RealData }> = ({ realData }) => {
@@ -103,6 +105,13 @@ const ScanningCard: React.FC<{ realData: RealData }> = ({ realData }) => {
         <p className="text-xs text-slate-300 leading-relaxed">
           <span className="text-cyan-500 font-bold"><Trans text="Supervisor" />: </span>
           {realData.summary}
+        </p>
+        <p className="mt-2 text-[11px] text-slate-500">
+          {realData.ai_fallback_reason
+            ? `Deterministic summary: ${realData.ai_fallback_reason}`
+            : realData.ai_source
+              ? `AI summary: active`
+              : 'Summary source: cached'}
         </p>
       </div>
     </div>

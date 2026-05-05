@@ -214,11 +214,16 @@ const CoinAnalysis = () => {
                     </Badge>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500">
-                  <Trans text={analysis.cache_hit ? 'Saved result' : analysis.ai_cache_hit ? 'Saved summary' : 'New check'} /> - {new Date(analysis.created_at).toLocaleString()}
-                </p>
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-slate-500">
+                    <Trans text={analysis.cache_hit ? 'Saved result' : analysis.ai_cache_hit ? 'Saved summary' : 'New check'} /> - {new Date(analysis.created_at).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {analysis.ai_summary_json.fallback_reason
+                      ? `Deterministic summary: ${analysis.ai_summary_json.fallback_reason}`
+                      : 'AI summary: active'}
+                  </p>
+                </CardContent>
+              </Card>
           )}
         </section>
 

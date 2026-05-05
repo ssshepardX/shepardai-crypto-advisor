@@ -189,6 +189,11 @@ export async function scanMarket(): Promise<CoinAnalysis[]> {
   });
 
   if (error) {
+    const context = 'context' in error ? error.context : null;
+    if (context instanceof Response) {
+      const details = await context.json().catch(() => null);
+      if (details?.error) throw new CoinAnalysisError(details.error, details);
+    }
     throw new CoinAnalysisError(error.message || 'Market scan failed');
   }
 
