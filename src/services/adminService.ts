@@ -34,6 +34,41 @@ export type ContactMessage = {
   created_at: string;
 };
 
+export type BacktestMode = 'historical_kline' | 'snapshot';
+export type ManualMovementLabel =
+  | 'organic_demand'
+  | 'whale_push'
+  | 'thin_liquidity_move'
+  | 'fomo_trap'
+  | 'fraud_pump_risk'
+  | 'news_social_catalyst'
+  | 'balanced_market';
+
+export type BacktestEvent = {
+  id?: string;
+  symbol: string;
+  timeframe: string;
+  event_start: string;
+  event_end: string | null;
+  move_pct: number;
+  volume_zscore: number;
+  detected_label: string;
+  realized_outcome: string;
+  manual_label?: ManualMovementLabel | null;
+  confidence_score: number;
+};
+
+export type BacktestResult = {
+  run: {
+    id: string;
+    created_at: string;
+    config_json: Record<string, unknown>;
+    metrics_json: Record<string, number>;
+  };
+  events: BacktestEvent[];
+  metrics: Record<string, number>;
+};
+
 async function callAdmin<T>(body: Record<string, unknown>): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Admin session missing');
@@ -55,11 +90,42 @@ async function callAdmin<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
+async function invokeAdminFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Admin session missing');
+  const { data, error } = await supabase.functions.invoke(name, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body,
+  });
+  if (error) {
+    const context = 'context' in error ? error.context : null;
+    if (context instanceof Response) {
+      const details = await context.json().catch(() => null);
+      if (details?.error) throw new Error(details.error);
+    }
+    throw new Error(error.message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data as T;
+}
+
 export const getAdminData = () => callAdmin<{ users: AdminUser[]; messages: ContactMessage[] }>({ action: 'list' });
 export const setUserSubscription = (user_id: string, plan: 'free' | 'pro' | 'trader', days: number) =>
   callAdmin<{ ok: true }>({ action: 'set-subscription', user_id, plan, interval: 'monthly', days });
 export const setMessageStatus = (id: string, status: 'new' | 'read' | 'closed') =>
   callAdmin<{ ok: true }>({ action: 'set-message-status', id, status });
+export const setMovementEventLabel = (id: string, manual_label: ManualMovementLabel | null) =>
+  callAdmin<{ ok: true }>({ action: 'set-event-label', id, manual_label });
+export const runBacktest = (input: {
+  symbols: string[];
+  timeframe: string;
+  from?: string;
+  to?: string;
+  mode: BacktestMode;
+}) => invokeAdminFunction<BacktestResult>('run-backtest', input);
+export const collectMarketSnapshot = (input: { symbols?: string[]; timeframe?: string; limit?: number }) =>
+  invokeAdminFunction<{ snapshot_count: number; event_count: number; errors: Array<{ symbol: string; error: string }> }>('market-snapshot', input);
 
 export async function submitContactMessage(input: {
   name?: string;

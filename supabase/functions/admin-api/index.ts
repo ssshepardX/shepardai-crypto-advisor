@@ -129,5 +129,16 @@ serve(async (req) => {
     return json({ ok: true });
   }
 
+  if (body.action === "set-event-label") {
+    const labels = ["organic_demand", "whale_push", "thin_liquidity_move", "fomo_trap", "fraud_pump_risk", "news_social_catalyst", "balanced_market"];
+    if (!body.id || (body.manual_label !== null && !labels.includes(body.manual_label))) return json({ error: "Invalid input" }, 400);
+    const { error } = await supabase
+      .from("movement_events")
+      .update({ manual_label: body.manual_label, updated_at: new Date().toISOString() })
+      .eq("id", body.id);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
   return json({ error: "Unknown action" }, 400);
 });
