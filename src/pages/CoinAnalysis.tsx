@@ -34,6 +34,7 @@ import {
   UserUsageDaily,
 } from '@/services/subscriptionService';
 import { Trans, useLanguage } from '@/contexts/LanguageContext';
+import { getCoinSentiment, SentimentResult } from '@/services/sentimentService';
 
 const TIMEFRAMES: AnalysisTimeframe[] = ['5m', '15m', '30m', '1h', '4h'];
 
@@ -59,6 +60,8 @@ const CoinAnalysis = () => {
   const [marketCoins, setMarketCoins] = useState<CoinData[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [usage, setUsage] = useState<UserUsageDaily | null>(null);
+  const [coinSentiment, setCoinSentiment] = useState<SentimentResult | null>(null);
+  const [sentimentLoading, setSentimentLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [limitReached, setLimitReached] = useState(false);
@@ -114,6 +117,28 @@ const CoinAnalysis = () => {
   const risk = analysis?.risk_json;
   const indicators = analysis?.indicator_json;
   const entitlement = PLAN_ENTITLEMENTS[subscription?.plan || 'free'];
+
+  useEffect(() => {
+    if (!analysis || !entitlement.canViewAdvancedRisk) {
+      setCoinSentiment(null);
+      return;
+    }
+    let cancelled = false;
+    setSentimentLoading(true);
+    getCoinSentiment(analysis.symbol)
+      .then((data) => {
+        if (!cancelled) setCoinSentiment(data.sentiment);
+      })
+      .catch(() => {
+        if (!cancelled) setCoinSentiment(null);
+      })
+      .finally(() => {
+        if (!cancelled) setSentimentLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [analysis, entitlement.canViewAdvancedRisk]);
 
   return (
     <AppShell
@@ -329,22 +354,32 @@ const CoinAnalysis = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Waves className="h-4 w-4 text-emerald-400" />
-                    <Trans text="News and social catalyst" />
+                    <Trans text="News/Social Sentiment" />
                   </CardTitle>
                 </CardHeader>
                 {entitlement.canViewAdvancedRisk ? (
                   <CardContent className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-                    <InfoLine label="News Sources" value={String(analysis.news_json?.source_count ?? 0)} />
-                    <InfoLine label="News Confidence" value={`${analysis.news_json?.confidence ?? 0}/100`} />
-                    <InfoLine label="Reddit Mentions" value={String(analysis.social_json?.mention_delta ?? 0)} />
-                    <InfoLine label="Social Confidence" value={`${analysis.social_json?.confidence ?? 0}/100`} />
+                    <InfoLine label="Mood" value={sentimentLoading ? 'Loading' : `${coinSentiment?.score_json.sentiment_label || 'neutral'} (${coinSentiment?.score_json.sentiment_score ?? analysis.news_json?.sentiment_score ?? 50}/100)`} />
+                    <InfoLine label="Mentions" value={`${coinSentiment?.score_json.mention_score ?? analysis.social_json?.mention_delta ?? 0}/100`} />
+                    <InfoLine label="Sources" value={String(coinSentiment?.score_json.source_count ?? analysis.news_json?.source_count ?? 0)} />
+                    <InfoLine label="Asia Watch" value={`${coinSentiment?.trend_json.asia_watch_score ?? 0}/100`} />
+                    <InfoLine label="Reddit Heat" value={`${coinSentiment?.trend_json.reddit_heat ?? 0}/100`} />
+                    <InfoLine label="Source Confidence" value={`${coinSentiment?.score_json.source_confidence ?? analysis.news_json?.confidence ?? 0}/100`} />
+                    <InfoLine label="News Mood" value={`${coinSentiment?.trend_json.news_mood ?? analysis.news_json?.sentiment_score ?? 50}/100`} />
+                    <InfoLine label="Trend" value={coinSentiment?.trend_json.trend_direction || 'flat'} />
+                    {coinSentiment?.trend_json.reason_short && (
+                      <div className="col-span-2 rounded-md border border-slate-800 bg-slate-950 p-3 md:col-span-4">
+                        <div className="text-xs text-slate-500"><Trans text="Reason" /></div>
+                        <div className="mt-1 text-sm text-slate-300">{coinSentiment.trend_json.reason_short}</div>
+                      </div>
+                    )}
                     <div className="col-span-2 rounded-md border border-slate-800 bg-slate-950 p-3 md:col-span-4">
                       <div className="text-xs text-slate-500"><Trans text="Catalyst terms" /></div>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {[...(analysis.news_json?.top_catalyst_terms || []), ...(analysis.social_json?.top_catalyst_terms || [])].slice(0, 8).map((term) => (
+                        {[...(coinSentiment?.source_json.top_catalyst_terms || []), ...(analysis.news_json?.top_catalyst_terms || []), ...(analysis.social_json?.top_catalyst_terms || [])].slice(0, 8).map((term) => (
                           <Badge key={term} variant="outline" className="border-slate-700 text-slate-300">{term}</Badge>
                         ))}
-                        {!(analysis.news_json?.top_catalyst_terms?.length || analysis.social_json?.top_catalyst_terms?.length) && (
+                        {!(coinSentiment?.source_json.top_catalyst_terms?.length || analysis.news_json?.top_catalyst_terms?.length || analysis.social_json?.top_catalyst_terms?.length) && (
                           <span className="text-sm text-slate-500"><Trans text="No catalyst term found yet." /></span>
                         )}
                       </div>

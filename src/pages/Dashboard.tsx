@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, BarChart3, Brain, Clock, RefreshCw, ShieldAlert, Zap } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BarChart3, Brain, Clock, Flame, RefreshCw, ShieldAlert, Zap } from 'lucide-react';
 import AppShell from '@/components/AppShell';
 import ScanningCard from '@/components/ScanningCard';
 import { AlertData, getAlerts } from '@/services/alertsApi';
@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Trans } from '@/contexts/LanguageContext';
+import { getMarketSentiment, SentimentError, SentimentResult } from '@/services/sentimentService';
+import { cn } from '@/lib/utils';
 
 const starterPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT'];
 
@@ -26,6 +28,9 @@ const DashboardPage = () => {
   const [recentAnalyses, setRecentAnalyses] = useState<CoinAnalysis[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [usage, setUsage] = useState<UserUsageDaily | null>(null);
+  const [sentimentTrends, setSentimentTrends] = useState<SentimentResult[]>([]);
+  const [sentimentSummary, setSentimentSummary] = useState<{ most_mentioned: string | null; news_mood: number; reddit_heat: number; asia_watch: number } | null>(null);
+  const [sentimentLocked, setSentimentLocked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -45,6 +50,21 @@ const DashboardPage = () => {
     }
   }, []);
 
+  const loadSentiment = useCallback(async (plan: string) => {
+    if (plan === 'free') {
+      setSentimentLocked(true);
+      return;
+    }
+    try {
+      const data = await getMarketSentiment(12);
+      setSentimentTrends(data.trends);
+      setSentimentSummary(data.summary);
+      setSentimentLocked(false);
+    } catch (err) {
+      if (err instanceof SentimentError && err.code === 'SENTIMENT_REQUIRES_PRO') setSentimentLocked(true);
+    }
+  }, []);
+
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -52,10 +72,11 @@ const DashboardPage = () => {
       setSubscription(sub);
       setUsage(today);
       await loadMarketData();
+      await loadSentiment(sub.plan);
     } finally {
       setIsLoading(false);
     }
-  }, [loadMarketData]);
+  }, [loadMarketData, loadSentiment]);
 
   useEffect(() => {
     document.body.className = 'dark';
@@ -124,6 +145,54 @@ const DashboardPage = () => {
         <MetricCard icon={Activity} label="Scanner" value={entitlement.canRunScanner ? 'Enabled' : `${entitlement.scannerDelayMinutes} min delay`} />
         <MetricCard icon={Clock} label="Renewal" value={subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString('tr-TR') : '-'} />
       </div>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <MetricCard icon={Flame} label="Most Mentioned" value={sentimentLocked ? 'PRO' : sentimentSummary?.most_mentioned?.replace('USDT', '') || '-'} />
+        <MetricCard icon={Activity} label="News Mood" value={sentimentLocked ? 'Locked' : `${sentimentSummary?.news_mood ?? 0}/100`} />
+        <MetricCard icon={Zap} label="Reddit Heat" value={sentimentLocked ? 'Locked' : `${sentimentSummary?.reddit_heat ?? 0}/100`} />
+        <MetricCard icon={Clock} label="Asia Watch" value={sentimentLocked ? 'Locked' : `${sentimentSummary?.asia_watch ?? 0}/100`} />
+      </div>
+
+      <Card className="border-slate-800 bg-slate-900">
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle className="text-base"><Trans text="Trend Intelligence" /></CardTitle>
+            <p className="mt-1 text-sm text-slate-400"><Trans text="Most mentioned coins and the likely news or social reason." /></p>
+          </div>
+          {sentimentLocked && <Button asChild className="bg-cyan-500 hover:bg-cyan-600"><Link to="/pricing">Upgrade</Link></Button>}
+        </CardHeader>
+        <CardContent>
+          {sentimentLocked ? (
+            <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
+              <Trans text="Trend sentiment is available on Pro and Trader plans." />
+            </div>
+          ) : sentimentTrends.length ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {sentimentTrends.slice(0, 8).map((item) => (
+                <Link key={item.symbol} to={`/analysis/${item.symbol}`} className="rounded-md border border-slate-800 bg-slate-950 p-3 transition hover:border-cyan-500/40">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-semibold text-slate-100">{item.symbol.replace('USDT', '')}</div>
+                    <div className="flex items-center gap-2">
+                      <TrendIcon direction={item.trend_json.trend_direction} />
+                      <SentimentBadge label={item.score_json.sentiment_label} score={item.score_json.sentiment_score} />
+                    </div>
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-sm text-slate-400">{item.trend_json.reason_short}</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <Badge className="bg-slate-800 text-slate-300">Mention {item.score_json.mention_score}/100</Badge>
+                    <Badge className="bg-slate-800 text-slate-300">Sources {item.score_json.source_count}</Badge>
+                    <Badge className="bg-slate-800 text-slate-300">Asia {item.trend_json.asia_watch_score}/100</Badge>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-slate-800 bg-slate-950 p-4 text-sm text-slate-400">
+              <Trans text="No sentiment trend yet." />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-slate-800 bg-slate-900">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -245,6 +314,23 @@ const MetricCard = ({ icon: Icon, label, value }: { icon: React.ElementType; lab
       <Icon className="h-6 w-6 text-cyan-400" />
     </CardContent>
   </Card>
+);
+
+const TrendIcon = ({ direction }: { direction: 'up' | 'down' | 'flat' }) => {
+  if (direction === 'up') return <ArrowUpRight className="h-4 w-4 text-emerald-400" />;
+  if (direction === 'down') return <ArrowDownRight className="h-4 w-4 text-rose-400" />;
+  return <ArrowRight className="h-4 w-4 text-slate-400" />;
+};
+
+const SentimentBadge = ({ label, score }: { label: string; score: number }) => (
+  <Badge className={cn(
+    'bg-slate-800',
+    label === 'good' && 'text-emerald-300',
+    label === 'bad' && 'text-rose-300',
+    label === 'neutral' && 'text-slate-300'
+  )}>
+    {label} {score}/100
+  </Badge>
 );
 
 export default DashboardPage;
