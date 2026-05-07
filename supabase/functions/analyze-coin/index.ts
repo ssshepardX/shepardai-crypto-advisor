@@ -700,33 +700,83 @@ function catalystTerms(text: string): string[] {
   return terms.filter((term) => lower.includes(term)).slice(0, 6);
 }
 
-async function fetchNewsSummary(symbol: string) {
-  const key = Deno.env.get("GOOGLE_CUSTOM_SEARCH_API_KEY") || "";
-  const cx = Deno.env.get("GOOGLE_CUSTOM_SEARCH_ENGINE_ID") || "";
-  if (!key || !cx) {
-    return {
-      status: "not_configured",
-      source_count: 0,
-      sentiment_score: null,
-      confidence: 0,
-      top_catalyst_terms: [],
-    };
-  }
+const FREE_NEWS_FEEDS = [
+  "https://www.coindesk.com/arc/outboundfeeds/rss/",
+  "https://cointelegraph.com/rss",
+  "https://decrypt.co/feed",
+  "https://cryptoslate.com/feed/",
+  "https://news.bitcoin.com/feed/",
+];
 
+const ASSET_ALIASES: Record<string, string[]> = {
+  BTC: ["btc", "bitcoin"],
+  ETH: ["eth", "ethereum", "ether"],
+  SOL: ["sol", "solana"],
+  BNB: ["bnb", "binance"],
+  XRP: ["xrp", "ripple"],
+  DOGE: ["doge", "dogecoin"],
+  ADA: ["ada", "cardano"],
+  AVAX: ["avax", "avalanche"],
+  TON: ["ton", "toncoin"],
+  TRX: ["trx", "tron"],
+  LINK: ["link", "chainlink"],
+  DOT: ["dot", "polkadot"],
+  MATIC: ["matic", "polygon"],
+  POL: ["pol", "polygon"],
+  SHIB: ["shib", "shiba"],
+};
+
+function stripFeedText(text = "") {
+  return text
+    .replace(/<!\[CDATA\[(.*?)\]\]>/gis, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function feedTag(block: string, name: string) {
+  const match = block.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, "i"));
+  return stripFeedText(match?.[1] || "");
+}
+
+function symbolAliases(symbol: string) {
+  const asset = baseAsset(symbol);
+  return Array.from(new Set([asset.toLowerCase(), symbol.toLowerCase(), ...(ASSET_ALIASES[asset] || [])]));
+}
+
+function matchesNewsSymbol(symbol: string, text: string) {
+  const lower = text.toLowerCase();
+  return symbolAliases(symbol).some((alias) => lower.includes(alias));
+}
+
+async function fetchFeedItems(url: string, symbol: string) {
+  const response = await fetch(url, { headers: { "User-Agent": "ShepardAI/1.0" } });
+  if (!response.ok) throw new Error(`rss_${response.status}`);
+  const xml = await response.text();
+  return [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)]
+    .map((match) => match[0])
+    .slice(0, 25)
+    .map((block) => `${feedTag(block, "title")} ${feedTag(block, "description")}`)
+    .filter((text) => matchesNewsSymbol(symbol, text))
+    .slice(0, 8);
+}
+
+async function fetchNewsSummary(symbol: string) {
   try {
-    const asset = baseAsset(symbol);
-    const query = encodeURIComponent(`${asset} crypto OR ${symbol} listing hack lawsuit partnership whale transfer`);
-    const response = await fetch(`https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${query}&num=5&dateRestrict=d7`);
-    if (!response.ok) throw new Error(`google_cse_${response.status}`);
-    const data = await response.json();
-    const items = Array.isArray(data.items) ? data.items : [];
-    const joined = items.map((item: { title?: string; snippet?: string }) => `${item.title || ""} ${item.snippet || ""}`).join(" ");
+    const settled = await Promise.allSettled(FREE_NEWS_FEEDS.map((feed) => fetchFeedItems(feed, symbol)));
+    const items = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    const failed = settled.filter((result) => result.status === "rejected").length;
+    const joined = items.join(" ");
     return {
-      status: "configured",
+      status: items.length || failed < FREE_NEWS_FEEDS.length ? "configured" : "provider_error",
       source_count: items.length,
       sentiment_score: items.length ? round(sentimentFromText(joined), 0) : null,
       confidence: round(clamp(items.length * 14), 0),
       top_catalyst_terms: catalystTerms(joined),
+      error: failed ? `${failed}_feed_failed` : undefined,
     };
   } catch (error) {
     return {

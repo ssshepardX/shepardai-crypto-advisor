@@ -45,6 +45,34 @@ const POSITIVE = ["listing", "partnership", "approval", "etf", "upgrade", "mainn
 const NEGATIVE = ["hack", "exploit", "lawsuit", "sec", "delist", "scam", "fraud", "rug", "outflow", "investigation", "halt", "ban", "breach"];
 const RISK = ["whale", "transfer", "unlock", "liquidation", "bridge", "exchange halt", "suspicious", "dump"];
 const TERMS = Array.from(new Set([...POSITIVE, ...NEGATIVE, ...RISK, "airdrop", "china", "korea", "japan", "hong kong", "binance", "coinbase"]));
+const NEWS_FEEDS = [
+  "https://www.coindesk.com/arc/outboundfeeds/rss/",
+  "https://cointelegraph.com/rss",
+  "https://decrypt.co/feed",
+  "https://cryptoslate.com/feed/",
+];
+const ASIA_FEEDS = [
+  "https://coinpost.jp/?feed=rss2",
+  "https://blockmedia.co.kr/feed",
+  "https://news.bitcoin.com/feed/",
+];
+const ASSET_NAMES: Record<string, string[]> = {
+  BTC: ["btc", "bitcoin"],
+  ETH: ["eth", "ethereum", "ether"],
+  SOL: ["sol", "solana"],
+  BNB: ["bnb", "binance"],
+  XRP: ["xrp", "ripple"],
+  DOGE: ["doge", "dogecoin"],
+  ADA: ["ada", "cardano"],
+  AVAX: ["avax", "avalanche"],
+  TON: ["ton", "toncoin"],
+  TRX: ["trx", "tron"],
+  LINK: ["link", "chainlink"],
+  DOT: ["dot", "polkadot"],
+  MATIC: ["matic", "polygon"],
+  POL: ["pol", "polygon"],
+  SHIB: ["shib", "shiba"],
+};
 
 function baseAsset(symbol: string) {
   return normalizeSymbol(symbol).replace(/USDT$/, "");
@@ -96,22 +124,58 @@ async function item(provider: SentimentItem["provider"], title: string, snippet 
   };
 }
 
-async function googleSearch(query: string, provider: "news" | "asia_watch", num = 5): Promise<{ status: string; items: SentimentItem[]; error?: string }> {
-  const key = Deno.env.get("GOOGLE_CUSTOM_SEARCH_API_KEY") || "";
-  const cx = Deno.env.get("GOOGLE_CUSTOM_SEARCH_ENGINE_ID") || "";
-  if (!key || !cx) return { status: "not_configured", items: [] };
+function stripXml(text = "") {
+  return text
+    .replace(/<!\[CDATA\[(.*?)\]\]>/gis, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tag(block: string, name: string) {
+  const match = block.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, "i"));
+  return stripXml(match?.[1] || "");
+}
+
+function aliases(symbol: string) {
+  const asset = baseAsset(symbol);
+  return Array.from(new Set([asset.toLowerCase(), symbol.toLowerCase(), ...(ASSET_NAMES[asset] || [])]));
+}
+
+function matchesSymbol(symbol: string, text: string) {
+  const lower = text.toLowerCase();
+  return aliases(symbol).some((alias) => lower.includes(alias));
+}
+
+async function rssFeed(url: string, provider: "news" | "asia_watch", symbol: string): Promise<SentimentItem[]> {
+  const response = await fetch(url, { headers: { "User-Agent": "ShepardAI/1.0" } });
+  if (!response.ok) throw new Error(`rss_${response.status}`);
+  const xml = await response.text();
+  const blocks = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)].map((match) => match[0]).slice(0, 25);
+  const rows = blocks
+    .map((block) => {
+      const title = tag(block, "title");
+      const snippet = tag(block, "description");
+      const link = tag(block, "link");
+      const created = tag(block, "pubDate");
+      return { title, snippet, link, created };
+    })
+    .filter((row) => row.title && matchesSymbol(symbol, `${row.title} ${row.snippet}`))
+    .slice(0, 8);
+  return Promise.all(rows.map((row) => item(provider, row.title, row.snippet, row.link, row.created)));
+}
+
+async function rssSearch(symbol: string, provider: "news" | "asia_watch", feeds: string[]): Promise<{ status: string; items: SentimentItem[]; error?: string }> {
   try {
-    const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${encodeURIComponent(query)}&num=${num}&dateRestrict=d7`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`google_cse_${response.status}`);
-    const data = await response.json();
-    const rows = Array.isArray(data.items) ? data.items : [];
-    return {
-      status: "configured",
-      items: await Promise.all(rows.map((row: { title?: string; snippet?: string; link?: string }) => item(provider, row.title || "", row.snippet || "", row.link || ""))),
-    };
+    const settled = await Promise.allSettled(feeds.map((feed) => rssFeed(feed, provider, symbol)));
+    const items = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    const failed = settled.filter((result) => result.status === "rejected").length;
+    return { status: items.length || failed < feeds.length ? "configured" : "provider_error", items, error: failed ? `${failed}_feed_failed` : undefined };
   } catch (error) {
-    return { status: "provider_error", items: [], error: error instanceof Error ? error.message : "unknown_error" };
+    return { status: "provider_error", items: [], error: error instanceof Error ? error.message : "rss_error" };
   }
 }
 
@@ -268,20 +332,13 @@ function aggregate(symbol: string, providerResults: Record<string, { status: str
 
 export async function scanSymbolSentiment(symbolInput: string, rank?: number): Promise<SentimentResult> {
   const symbol = normalizeSymbol(symbolInput);
-  const asset = baseAsset(symbol);
-  const [news, asia1, asia2, reddit, panic, gecko] = await Promise.all([
-    googleSearch(`${asset} crypto news OR ${symbol} listing hack lawsuit partnership whale transfer`, "news", 5),
-    googleSearch(`${asset} crypto Japan Korea China Hong Kong`, "asia_watch", 3),
-    googleSearch(`${asset} 日本 韓国 中国 crypto`, "asia_watch", 2),
+  const [news, asia, reddit, panic, gecko] = await Promise.all([
+    rssSearch(symbol, "news", NEWS_FEEDS),
+    rssSearch(symbol, "asia_watch", ASIA_FEEDS),
     redditSearch(symbol),
     cryptoPanic(symbol),
     coinGeckoNews(symbol),
   ]);
-  const asia = {
-    status: asia1.status === "configured" || asia2.status === "configured" ? "configured" : asia1.status,
-    items: [...asia1.items, ...asia2.items],
-    error: asia1.error || asia2.error,
-  };
   return aggregate(symbol, { news, asia_watch: asia, reddit, cryptopanic: panic, coingecko: gecko, x: xStatus() }, rank);
 }
 
