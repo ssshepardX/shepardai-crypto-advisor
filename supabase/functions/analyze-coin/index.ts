@@ -706,6 +706,11 @@ const FREE_NEWS_FEEDS = [
   "https://decrypt.co/feed",
   "https://cryptoslate.com/feed/",
   "https://news.bitcoin.com/feed/",
+  "https://app.chaingpt.org/rssfeeds.xml",
+  "https://coinpost.jp/?feed=rss2",
+  "https://blockmedia.co.kr/feed",
+  "https://rss.odaily.news/rss/newsflash",
+  "https://rss.odaily.news/rss/post",
 ];
 
 const ASSET_ALIASES: Record<string, string[]> = {
@@ -813,6 +818,17 @@ async function getRedditToken() {
 
 async function fetchSocialSummary(symbol: string) {
   const userAgent = Deno.env.get("REDDIT_USER_AGENT") || "shepard-advisor/0.1";
+  if (Deno.env.get("ENABLE_REDDIT_SENTIMENT") !== "true") {
+    return {
+      status: "disabled_rss_only_mode",
+      mention_delta: null,
+      sentiment_score: null,
+      source_count: 0,
+      top_catalyst_terms: [],
+      confidence: 0,
+      x_status: "not_configured",
+    };
+  }
   if (!Deno.env.get("REDDIT_CLIENT_ID") || !Deno.env.get("REDDIT_CLIENT_SECRET")) {
     return {
       status: "not_configured",

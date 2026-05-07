@@ -50,11 +50,14 @@ const NEWS_FEEDS = [
   "https://cointelegraph.com/rss",
   "https://decrypt.co/feed",
   "https://cryptoslate.com/feed/",
+  "https://news.bitcoin.com/feed/",
+  "https://app.chaingpt.org/rssfeeds.xml",
 ];
 const ASIA_FEEDS = [
   "https://coinpost.jp/?feed=rss2",
   "https://blockmedia.co.kr/feed",
-  "https://news.bitcoin.com/feed/",
+  "https://rss.odaily.news/rss/newsflash",
+  "https://rss.odaily.news/rss/post",
 ];
 const ASSET_NAMES: Record<string, string[]> = {
   BTC: ["btc", "bitcoin"],
@@ -199,6 +202,7 @@ async function redditToken() {
 }
 
 async function redditSearch(symbol: string): Promise<{ status: string; items: SentimentItem[]; error?: string; rate_remaining?: string | null }> {
+  if (Deno.env.get("ENABLE_REDDIT_SENTIMENT") !== "true") return { status: "disabled_rss_only_mode", items: [] };
   if (!Deno.env.get("REDDIT_CLIENT_ID") || !Deno.env.get("REDDIT_CLIENT_SECRET")) return { status: "not_configured", items: [] };
   try {
     const token = await redditToken();
