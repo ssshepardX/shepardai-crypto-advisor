@@ -60,7 +60,7 @@ async function invokeSentiment<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-export async function getMarketSentiment(limit = 12) {
+export async function getMarketSentiment(limit = 3) {
   return invokeSentiment<{
     trends: SentimentResult[];
     summary: { most_mentioned: string | null; news_mood: number; reddit_heat: number; asia_watch: number };

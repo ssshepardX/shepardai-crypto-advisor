@@ -24,7 +24,7 @@ class ApiError extends Error {
 }
 
 function ttlMinutes(mode: string) {
-  return mode === "market" ? 15 : 30;
+  return mode === "market" ? 360 : 720;
 }
 
 function isAdminEmail(email?: string | null) {
@@ -128,7 +128,7 @@ async function updateSources(result: Record<string, unknown>) {
 }
 
 async function marketScan(limitInput: unknown) {
-  const limit = Math.min(Math.max(Number(limitInput || 12), 1), 20);
+  const limit = Math.min(Math.max(Number(limitInput || 3), 1), 3);
   const cached = await readCached("MARKET", "market");
   if (cached) return { trends: cached.trend_json?.trends || [], summary: cached.score_json || {}, cache_hit: true, created_at: cached.created_at };
 

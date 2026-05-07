@@ -56,7 +56,7 @@ const DashboardPage = () => {
       return;
     }
     try {
-      const data = await getMarketSentiment(12);
+      const data = await getMarketSentiment(3);
       setSentimentTrends(data.trends);
       setSentimentSummary(data.summary);
       setSentimentLocked(false);

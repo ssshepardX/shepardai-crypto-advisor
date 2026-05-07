@@ -162,6 +162,7 @@ async function redditSearch(symbol: string): Promise<{ status: string; items: Se
 }
 
 async function cryptoPanic(symbol: string): Promise<{ status: string; items: SentimentItem[]; error?: string }> {
+  if (Deno.env.get("ENABLE_PAID_SENTIMENT_PROVIDERS") !== "true") return { status: "disabled_free_mode", items: [] };
   const token = Deno.env.get("CRYPTOPANIC_API_TOKEN") || "";
   if (!token) return { status: "not_configured", items: [] };
   try {
@@ -183,6 +184,7 @@ async function cryptoPanic(symbol: string): Promise<{ status: string; items: Sen
 }
 
 async function coinGeckoNews(symbol: string): Promise<{ status: string; items: SentimentItem[]; error?: string }> {
+  if (Deno.env.get("ENABLE_PAID_SENTIMENT_PROVIDERS") !== "true") return { status: "disabled_free_mode", items: [] };
   const key = Deno.env.get("COINGECKO_API_KEY") || "";
   if (!key) return { status: "not_configured", items: [] };
   try {
