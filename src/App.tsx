@@ -29,6 +29,7 @@ const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const PaymentResult = lazy(() => import("./pages/PaymentResult"));
 const Admin = lazy(() => import("./pages/Admin"));
+const TelegramMiniApp = lazy(() => import("./pages/TelegramMiniApp"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,6 +92,7 @@ const App = () => (
                   <Route path="/contact" element={<Contact />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/tg" element={<TelegramMiniApp />} />
 
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
