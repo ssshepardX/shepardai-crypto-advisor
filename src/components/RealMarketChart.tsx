@@ -168,6 +168,7 @@ const RealMarketChart = ({ symbol, timeframe, analysis }: RealMarketChartProps) 
       }
 
       chart.timeScale().fitContent();
+      chart.timeScale().scrollToPosition(4, false);
       setStatus('ready');
     };
 
@@ -180,8 +181,8 @@ const RealMarketChart = ({ symbol, timeframe, analysis }: RealMarketChartProps) 
   }, [symbol, timeframe, analysis]);
 
   return (
-    <div className="relative h-full min-h-[360px]">
-      <div ref={containerRef} className="h-full min-h-[360px] w-full" />
+    <div className="relative h-full min-h-0 w-full overflow-hidden rounded-md">
+      <div ref={containerRef} className="h-full min-h-0 w-full" />
       {status === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-950/60 text-sm text-slate-400">
           Market verisi yukleniyor
@@ -242,7 +243,7 @@ function quantNomadStyleMarkers(
         position: 'belowBar' as const,
         color: '#22c55e',
         shape: 'arrowUp' as const,
-        text: 'BUY',
+        text: 'Bullish',
       });
     }
     if (crossedDown && rsiValues[index] <= 50 && bearishCandle) {
@@ -251,7 +252,7 @@ function quantNomadStyleMarkers(
         position: 'aboveBar' as const,
         color: '#ef4444',
         shape: 'arrowDown' as const,
-        text: 'SELL',
+        text: 'Bearish',
       });
     }
   }

@@ -6,6 +6,8 @@ import {
   BarChart3,
   Brain,
   CandlestickChart,
+  Maximize2,
+  Minimize2,
   RefreshCw,
   ShieldAlert,
   TrendingUp,
@@ -60,6 +62,7 @@ const CoinAnalysis = () => {
   const [symbol, setSymbol] = useState((routeSymbol || 'BTCUSDT').toUpperCase());
   const [timeframe, setTimeframe] = useState<AnalysisTimeframe>('15m');
   const [chartTimeframe, setChartTimeframe] = useState<AnalysisTimeframe>('15m');
+  const [chartExpanded, setChartExpanded] = useState(false);
   const [analysis, setAnalysis] = useState<CoinAnalysisData | null>(null);
   const [marketCoins, setMarketCoins] = useState<CoinData[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
@@ -304,18 +307,31 @@ const CoinAnalysis = () => {
         </section>
 
         <section className="space-y-4">
-          <Card className="border-slate-800 bg-slate-900">
+          {chartExpanded && <div className="fixed inset-0 z-40 bg-slate-950/80" />}
+          <Card className={cn('border-slate-800 bg-slate-900', chartExpanded && 'fixed inset-3 z-50 flex flex-col')}>
             <CardHeader className="space-y-3">
               <div className="flex flex-row items-center justify-between gap-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <BarChart3 className="h-4 w-4 text-cyan-400" />
                   <Trans text="Market chart" />
                 </CardTitle>
-                {aiSummary && (
-                  <Badge className="bg-slate-800 text-slate-200">
-                    <Trans text="Cause" />: {formatCauseLabel(analysis?.cause_json?.likely_cause || aiSummary.likely_cause, language)}
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {aiSummary && (
+                    <Badge className="hidden bg-slate-800 text-slate-200 sm:inline-flex">
+                      <Trans text="Cause" />: {formatCauseLabel(analysis?.cause_json?.likely_cause || aiSummary.likely_cause, language)}
+                    </Badge>
+                  )}
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8 border-slate-700 bg-slate-950"
+                    onClick={() => setChartExpanded((value) => !value)}
+                    title={chartExpanded ? 'Minimize chart' : 'Expand chart'}
+                  >
+                    {chartExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {TIMEFRAMES.map((item) => (
@@ -332,8 +348,11 @@ const CoinAnalysis = () => {
                 ))}
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="h-[360px] rounded-lg border border-slate-800 bg-slate-950 p-3">
+            <CardContent className={cn(chartExpanded && 'min-h-0 flex-1')}>
+              <div className={cn(
+                'w-full overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-2',
+                chartExpanded ? 'h-full min-h-[calc(100vh-180px)]' : 'h-[420px]',
+              )}>
                 <RealMarketChart symbol={symbol} timeframe={chartTimeframe} analysis={analysis} />
               </div>
             </CardContent>
