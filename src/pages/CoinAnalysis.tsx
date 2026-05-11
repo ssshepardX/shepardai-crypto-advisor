@@ -59,6 +59,7 @@ const CoinAnalysis = () => {
   const { symbol: routeSymbol } = useParams();
   const [symbol, setSymbol] = useState((routeSymbol || 'BTCUSDT').toUpperCase());
   const [timeframe, setTimeframe] = useState<AnalysisTimeframe>('15m');
+  const [chartTimeframe, setChartTimeframe] = useState<AnalysisTimeframe>('15m');
   const [analysis, setAnalysis] = useState<CoinAnalysisData | null>(null);
   const [marketCoins, setMarketCoins] = useState<CoinData[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
@@ -304,20 +305,36 @@ const CoinAnalysis = () => {
 
         <section className="space-y-4">
           <Card className="border-slate-800 bg-slate-900">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BarChart3 className="h-4 w-4 text-cyan-400" />
-                <Trans text="Market chart" />
-              </CardTitle>
-              {aiSummary && (
-                <Badge className="bg-slate-800 text-slate-200">
-                  <Trans text="Cause" />: {formatCauseLabel(analysis?.cause_json?.likely_cause || aiSummary.likely_cause, language)}
-                </Badge>
-              )}
+            <CardHeader className="space-y-3">
+              <div className="flex flex-row items-center justify-between gap-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BarChart3 className="h-4 w-4 text-cyan-400" />
+                  <Trans text="Market chart" />
+                </CardTitle>
+                {aiSummary && (
+                  <Badge className="bg-slate-800 text-slate-200">
+                    <Trans text="Cause" />: {formatCauseLabel(analysis?.cause_json?.likely_cause || aiSummary.likely_cause, language)}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {TIMEFRAMES.map((item) => (
+                  <Button
+                    key={item}
+                    type="button"
+                    size="sm"
+                    variant={chartTimeframe === item ? 'default' : 'outline'}
+                    onClick={() => setChartTimeframe(item)}
+                    className="h-7 px-3 text-xs"
+                  >
+                    {item}
+                  </Button>
+                ))}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="h-[360px] rounded-lg border border-slate-800 bg-slate-950 p-3">
-                <RealMarketChart symbol={symbol} timeframe={timeframe} analysis={analysis} />
+                <RealMarketChart symbol={symbol} timeframe={chartTimeframe} analysis={analysis} />
               </div>
             </CardContent>
           </Card>

@@ -3,6 +3,7 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
+  createSeriesMarkers,
   HistogramSeries,
   LineSeries,
   UTCTimestamp,
@@ -91,6 +92,20 @@ const RealMarketChart = ({ symbol, timeframe, analysis }: RealMarketChartProps) 
       lastValueVisible: false,
     });
 
+    const emaFastSeries = chart.addSeries(LineSeries, {
+      color: '#a78bfa',
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    });
+
+    const emaSlowSeries = chart.addSeries(LineSeries, {
+      color: '#facc15',
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    });
+
     const load = async () => {
       setStatus('loading');
       const klines = await getBinanceKlines(symbol, timeframe, 240);
@@ -119,6 +134,21 @@ const RealMarketChart = ({ symbol, timeframe, analysis }: RealMarketChartProps) 
 
       candleSeries.setData(candles);
       volumeSeries.setData(volumes);
+
+      const closes = klines.map((kline) => Number(kline.close));
+      const emaFast = ema(closes, 9);
+      const emaSlow = ema(closes, 21);
+      const rsiValues = rsi(closes, 14);
+      emaFastSeries.setData(emaFast.map((value, index) => ({
+        time: candles[index].time,
+        value,
+      })).filter((item) => Number.isFinite(item.value)));
+      emaSlowSeries.setData(emaSlow.map((value, index) => ({
+        time: candles[index].time,
+        value,
+      })).filter((item) => Number.isFinite(item.value)));
+
+      createSeriesMarkers(candleSeries, quantNomadStyleMarkers(candles, emaFast, emaSlow, rsiValues));
 
       if (analysis) {
         const firstTime = candles[0].time;
@@ -163,10 +193,69 @@ const RealMarketChart = ({ symbol, timeframe, analysis }: RealMarketChartProps) 
         </div>
       )}
       <div className="absolute bottom-2 right-3 text-[10px] text-slate-600">
-        Lightweight Charts by TradingView
+        Lightweight Charts by TradingView - QN-style EMA/RSI markers
       </div>
     </div>
   );
 };
+
+function ema(values: number[], period: number) {
+  const multiplier = 2 / (period + 1);
+  return values.reduce<number[]>((series, value, index) => {
+    if (index === 0) return [value];
+    series.push(value * multiplier + series[index - 1] * (1 - multiplier));
+    return series;
+  }, []);
+}
+
+function rsi(values: number[], period: number) {
+  return values.map((_, index) => {
+    if (index < period) return 50;
+    let gains = 0;
+    let losses = 0;
+    for (let i = index - period + 1; i <= index; i++) {
+      const diff = values[i] - values[i - 1];
+      if (diff >= 0) gains += diff;
+      else losses += Math.abs(diff);
+    }
+    if (losses === 0) return 100;
+    const rs = gains / losses;
+    return 100 - (100 / (1 + rs));
+  });
+}
+
+function quantNomadStyleMarkers(
+  candles: Array<{ time: UTCTimestamp; open: number; high: number; low: number; close: number }>,
+  emaFast: number[],
+  emaSlow: number[],
+  rsiValues: number[],
+) {
+  const markers = [];
+  for (let index = 2; index < candles.length; index++) {
+    const crossedUp = emaFast[index - 1] <= emaSlow[index - 1] && emaFast[index] > emaSlow[index];
+    const crossedDown = emaFast[index - 1] >= emaSlow[index - 1] && emaFast[index] < emaSlow[index];
+    const bullishCandle = candles[index].close > candles[index].open;
+    const bearishCandle = candles[index].close < candles[index].open;
+    if (crossedUp && rsiValues[index] >= 50 && bullishCandle) {
+      markers.push({
+        time: candles[index].time,
+        position: 'belowBar' as const,
+        color: '#22c55e',
+        shape: 'arrowUp' as const,
+        text: 'BUY',
+      });
+    }
+    if (crossedDown && rsiValues[index] <= 50 && bearishCandle) {
+      markers.push({
+        time: candles[index].time,
+        position: 'aboveBar' as const,
+        color: '#ef4444',
+        shape: 'arrowDown' as const,
+        text: 'SELL',
+      });
+    }
+  }
+  return markers.slice(-40);
+}
 
 export default RealMarketChart;
