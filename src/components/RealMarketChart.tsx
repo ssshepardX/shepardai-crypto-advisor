@@ -108,20 +108,6 @@ const RealMarketChart = ({ symbol, timeframe, analysis }: RealMarketChartProps) 
       lastValueVisible: false,
     });
 
-    const emaFastSeries = chart.addSeries(LineSeries, {
-      color: '#a78bfa',
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    });
-
-    const emaSlowSeries = chart.addSeries(LineSeries, {
-      color: '#facc15',
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    });
-
     const load = async () => {
       setStatus('loading');
       const klines = await getBinanceKlines(symbol, timeframe, 240);
@@ -151,28 +137,13 @@ const RealMarketChart = ({ symbol, timeframe, analysis }: RealMarketChartProps) 
       candleSeries.setData(candles);
       volumeSeries.setData(volumes);
 
-      const closes = klines.map((kline) => Number(kline.close));
-      const emaFast = ema(closes, 9);
-      const emaSlow = ema(closes, 21);
-      const rsiValues = rsi(closes, 14);
-      emaFastSeries.setData(emaFast.map((value, index) => ({
-        time: candles[index].time,
-        value,
-      })).filter((item) => Number.isFinite(item.value)));
-      emaSlowSeries.setData(emaSlow.map((value, index) => ({
-        time: candles[index].time,
-        value,
-      })).filter((item) => Number.isFinite(item.value)));
-
-      createSeriesMarkers(candleSeries, quantNomadStyleMarkers(candles, emaFast, emaSlow, rsiValues));
+      const vwapData = rollingVwapData(klines, candles);
+      vwapSeries.setData(vwapData);
+      createSeriesMarkers(candleSeries, movementMarkers(candles, klines, vwapData));
 
       if (analysis) {
         const firstTime = candles[0].time;
         const lastTime = candles[candles.length - 1].time;
-        vwapSeries.setData([
-          { time: firstTime, value: analysis.indicator_json.vwap },
-          { time: lastTime, value: analysis.indicator_json.vwap },
-        ]);
         supportSeries.setData([
           { time: firstTime, value: analysis.indicator_json.support },
           { time: lastTime, value: analysis.indicator_json.support },
@@ -214,50 +185,50 @@ const RealMarketChart = ({ symbol, timeframe, analysis }: RealMarketChartProps) 
         </div>
       )}
       <div className="absolute bottom-2 right-3 text-[10px] text-slate-600">
-        Lightweight Charts by TradingView - QN-style EMA/RSI markers
+        Lightweight Charts by TradingView - VWAP / breakout markers
       </div>
     </div>
   );
 };
 
-function ema(values: number[], period: number) {
-  const multiplier = 2 / (period + 1);
-  return values.reduce<number[]>((series, value, index) => {
-    if (index === 0) return [value];
-    series.push(value * multiplier + series[index - 1] * (1 - multiplier));
-    return series;
-  }, []);
-}
-
-function rsi(values: number[], period: number) {
-  return values.map((_, index) => {
-    if (index < period) return 50;
-    let gains = 0;
-    let losses = 0;
-    for (let i = index - period + 1; i <= index; i++) {
-      const diff = values[i] - values[i - 1];
-      if (diff >= 0) gains += diff;
-      else losses += Math.abs(diff);
-    }
-    if (losses === 0) return 100;
-    const rs = gains / losses;
-    return 100 - (100 / (1 + rs));
+function rollingVwapData(
+  klines: Awaited<ReturnType<typeof getBinanceKlines>>,
+  candles: Array<{ time: UTCTimestamp; open: number; high: number; low: number; close: number }>,
+) {
+  let quote = 0;
+  let base = 0;
+  return klines.map((kline, index) => {
+    quote += Number(kline.quoteVolume);
+    base += Number(kline.volume);
+    return {
+      time: candles[index].time,
+      value: base > 0 ? quote / base : candles[index].close,
+    };
   });
 }
 
-function quantNomadStyleMarkers(
+function movementMarkers(
   candles: Array<{ time: UTCTimestamp; open: number; high: number; low: number; close: number }>,
-  emaFast: number[],
-  emaSlow: number[],
-  rsiValues: number[],
+  klines: Awaited<ReturnType<typeof getBinanceKlines>>,
+  vwapData: Array<{ time: UTCTimestamp; value: number }>,
 ) {
   const markers = [];
-  for (let index = 2; index < candles.length; index++) {
-    const crossedUp = emaFast[index - 1] <= emaSlow[index - 1] && emaFast[index] > emaSlow[index];
-    const crossedDown = emaFast[index - 1] >= emaSlow[index - 1] && emaFast[index] < emaSlow[index];
+  const volumes = klines.map((kline) => Number(kline.quoteVolume));
+  for (let index = 41; index < candles.length; index++) {
+    const range = candles.slice(index - 40, index);
+    const resistance = Math.max(...range.map((candle) => candle.high));
+    const support = Math.min(...range.map((candle) => candle.low));
+    const recentVolumes = volumes.slice(index - 21, index - 1);
+    const volumeZ = zScore(volumes[index], recentVolumes);
+    const candleRange = Math.max(candles[index].high - candles[index].low, 0.00000001);
+    const bodyPct = Math.abs(candles[index].close - candles[index].open) / candleRange * 100;
+    const upperWickPct = (candles[index].high - Math.max(candles[index].open, candles[index].close)) / candleRange * 100;
+    const lowerWickPct = (Math.min(candles[index].open, candles[index].close) - candles[index].low) / candleRange * 100;
     const bullishCandle = candles[index].close > candles[index].open;
     const bearishCandle = candles[index].close < candles[index].open;
-    if (crossedUp && rsiValues[index] >= 50 && bullishCandle) {
+    const aboveVwap = candles[index].close > vwapData[index].value;
+    const belowVwap = candles[index].close < vwapData[index].value;
+    if (candles[index].close > resistance && aboveVwap && volumeZ > 1.5 && bodyPct > 45 && upperWickPct < 35 && bullishCandle) {
       markers.push({
         time: candles[index].time,
         position: 'belowBar' as const,
@@ -266,7 +237,7 @@ function quantNomadStyleMarkers(
         text: 'Bullish',
       });
     }
-    if (crossedDown && rsiValues[index] <= 50 && bearishCandle) {
+    if (candles[index].close < support && belowVwap && volumeZ > 1.5 && bodyPct > 45 && lowerWickPct < 35 && bearishCandle) {
       markers.push({
         time: candles[index].time,
         position: 'aboveBar' as const,
@@ -277,6 +248,14 @@ function quantNomadStyleMarkers(
     }
   }
   return markers.slice(-40);
+}
+
+function zScore(value: number, values: number[]) {
+  if (!values.length) return 0;
+  const mean = values.reduce((sum, item) => sum + item, 0) / values.length;
+  const variance = values.reduce((sum, item) => sum + (item - mean) ** 2, 0) / values.length;
+  const deviation = Math.sqrt(variance);
+  return deviation === 0 ? 0 : (value - mean) / deviation;
 }
 
 export default RealMarketChart;

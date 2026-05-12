@@ -16,13 +16,17 @@ export interface IndicatorSummary {
   atr14: number;
   atrPct: number;
   vwap: number;
+  vwapDistancePct?: number;
   volumeMultiplier: number;
   takerBuyRatio: number;
   bodyPct: number;
+  bodyToWickRatio?: number;
   upperWickPct: number;
   lowerWickPct: number;
   support: number;
   resistance: number;
+  rangeBreakout?: boolean;
+  accumulationRangePct?: number;
   priceAccelerationPct: number;
   volumeZScore: number;
   tradeCountZScore: number;

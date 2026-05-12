@@ -45,13 +45,17 @@ export type IndicatorSummary = {
   atr14: number;
   atrPct: number;
   vwap: number;
+  vwapDistancePct: number;
   volumeMultiplier: number;
   takerBuyRatio: number;
   bodyPct: number;
+  bodyToWickRatio: number;
   upperWickPct: number;
   lowerWickPct: number;
   support: number;
   resistance: number;
+  rangeBreakout: boolean;
+  accumulationRangePct: number;
   priceAccelerationPct: number;
   volumeZScore: number;
   tradeCountZScore: number;
@@ -191,19 +195,6 @@ export async function fetchRecentTrades(symbol: string, price: number): Promise<
   };
 }
 
-function ema(values: number[], period: number): number[] {
-  if (values.length < period) return [];
-  const multiplier = 2 / (period + 1);
-  const result: number[] = [];
-  let previous = values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
-  result.push(previous);
-  for (let i = period; i < values.length; i++) {
-    previous = (values[i] - previous) * multiplier + previous;
-    result.push(previous);
-  }
-  return result;
-}
-
 function standardDeviation(values: number[]): number {
   if (values.length === 0) return 0;
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -217,20 +208,6 @@ function zScore(value: number, values: number[]): number {
   return (value - mean) / deviation;
 }
 
-function rsi(values: number[], period = 14): number {
-  if (values.length <= period) return 50;
-  let gains = 0;
-  let losses = 0;
-  for (let i = values.length - period; i < values.length; i++) {
-    const diff = values[i] - values[i - 1];
-    if (diff >= 0) gains += diff;
-    else losses += Math.abs(diff);
-  }
-  if (losses === 0) return 100;
-  const rs = gains / period / (losses / period);
-  return 100 - 100 / (1 + rs);
-}
-
 function atr(klines: Kline[], period = 14): number {
   if (klines.length <= period) return 0;
   const trs: number[] = [];
@@ -242,28 +219,9 @@ function atr(klines: Kline[], period = 14): number {
   return trs.reduce((sum, value) => sum + value, 0) / trs.length;
 }
 
-function bollinger(values: number[], period = 20) {
-  const slice = values.slice(-period);
-  const middle = slice.reduce((sum, value) => sum + value, 0) / slice.length;
-  const deviation = standardDeviation(slice);
-  return { upper: middle + deviation * 2, middle, lower: middle - deviation * 2 };
-}
-
 export function calculateIndicators(klines: Kline[]): IndicatorSummary {
-  const closes = klines.map((kline) => kline.close);
   const quoteVolumes = klines.map((kline) => kline.quoteVolume);
   const last = klines[klines.length - 1];
-  const ema9 = ema(closes, 9).at(-1) || last.close;
-  const ema21 = ema(closes, 21).at(-1) || last.close;
-  const ema50 = ema(closes, 50).at(-1) || last.close;
-  const ema12 = ema(closes, 12);
-  const ema26 = ema(closes, 26);
-  const offset = ema12.length - ema26.length;
-  const macdSeries = ema26.map((value, index) => ema12[index + offset] - value);
-  const macdSignalSeries = ema(macdSeries, 9);
-  const macdValue = macdSeries.at(-1) || 0;
-  const macdSignal = macdSignalSeries.at(-1) || 0;
-  const bb = bollinger(closes, 20);
   const atr14 = atr(klines, 14);
   const recentVolume = quoteVolumes.slice(-21, -1);
   const avgVolume = recentVolume.reduce((sum, value) => sum + value, 0) / Math.max(recentVolume.length, 1);
@@ -275,66 +233,78 @@ export function calculateIndicators(klines: Kline[]): IndicatorSummary {
   const bodyPct = Math.abs(last.close - last.open) / candleRange * 100;
   const upperWickPct = (last.high - Math.max(last.open, last.close)) / candleRange * 100;
   const lowerWickPct = (Math.min(last.open, last.close) - last.low) / candleRange * 100;
-  const swingWindow = klines.slice(-40);
-  const previousClose = klines.at(-2)?.close || last.open;
-  const close5 = klines.at(-6)?.close || previousClose;
-  const close10 = klines.at(-11)?.close || close5;
-  const move5 = close5 > 0 ? (last.close - close5) / close5 * 100 : 0;
-  const previousMove5 = close10 > 0 ? (close5 - close10) / close10 * 100 : 0;
+  const bodyToWickRatio = Math.abs(last.close - last.open) / Math.max(last.high - last.low - Math.abs(last.close - last.open), 0.00000001);
+  const swingWindow = klines.slice(-41, -1);
+  const rangeWindow = swingWindow.length ? swingWindow : klines.slice(0, -1);
   const recentRanges = klines.slice(-21, -1).map((kline) => kline.high - kline.low);
   const avgRange = recentRanges.reduce((sum, value) => sum + value, 0) / Math.max(recentRanges.length, 1);
-  const resistance = Math.max(...swingWindow.map((kline) => kline.high));
-  const support = Math.min(...swingWindow.map((kline) => kline.low));
-  const higherTimeframeBias = (last.close > ema21 ? 1 : 0) + (ema9 > ema21 ? 1 : 0) + (ema21 > ema50 ? 1 : 0);
+  const resistance = rangeWindow.length ? Math.max(...rangeWindow.map((kline) => kline.high)) : last.high;
+  const support = rangeWindow.length ? Math.min(...rangeWindow.map((kline) => kline.low)) : last.low;
+  const vwap = totalBase > 0 ? totalQuote / totalBase : last.close;
+  const vwapDistancePct = vwap > 0 ? (last.close - vwap) / vwap * 100 : 0;
+  const atrPct = last.close > 0 ? atr14 / last.close * 100 : 0;
+  const accumulationRangePct = last.close > 0 ? (resistance - support) / last.close * 100 : 0;
+  const isAccumulation = accumulationRangePct <= Math.max(atrPct * 3, 2.5);
+  const rangeBreakout = isAccumulation && (last.close > resistance || last.close < support);
+  const rangeBreakoutPct = last.close > resistance && resistance > 0
+    ? (last.close - resistance) / resistance * 100
+    : last.close < support && support > 0
+      ? (last.close - support) / support * 100
+      : 0;
   return {
-    ema9: round(ema9),
-    ema21: round(ema21),
-    ema50: round(ema50),
-    rsi14: round(rsi(closes, 14), 2),
-    macd: round(macdValue, 6),
-    macdSignal: round(macdSignal, 6),
-    macdHistogram: round(macdValue - macdSignal, 6),
-    bollingerUpper: round(bb.upper),
-    bollingerMiddle: round(bb.middle),
-    bollingerLower: round(bb.lower),
+    ema9: round(last.close),
+    ema21: round(last.close),
+    ema50: round(last.close),
+    rsi14: 50,
+    macd: 0,
+    macdSignal: 0,
+    macdHistogram: 0,
+    bollingerUpper: round(last.close),
+    bollingerMiddle: round(last.close),
+    bollingerLower: round(last.close),
     atr14: round(atr14),
-    atrPct: round(last.close > 0 ? atr14 / last.close * 100 : 0, 2),
-    vwap: round(totalBase > 0 ? totalQuote / totalBase : last.close),
+    atrPct: round(atrPct, 2),
+    vwap: round(vwap),
+    vwapDistancePct: round(vwapDistancePct, 2),
     volumeMultiplier: round(avgVolume > 0 ? last.quoteVolume / avgVolume : 1, 2),
     takerBuyRatio: round(takerBuyRatio, 3),
     bodyPct: round(bodyPct, 2),
+    bodyToWickRatio: round(bodyToWickRatio, 2),
     upperWickPct: round(upperWickPct, 2),
     lowerWickPct: round(lowerWickPct, 2),
     support: round(support),
     resistance: round(resistance),
-    priceAccelerationPct: round(move5 - previousMove5, 2),
+    rangeBreakout,
+    accumulationRangePct: round(accumulationRangePct, 2),
+    priceAccelerationPct: 0,
     volumeZScore: round(zScore(last.quoteVolume, recentVolume), 2),
     tradeCountZScore: round(zScore(last.trades, recentTrades), 2),
     candleExpansion: round(avgRange > 0 ? candleRange / avgRange : 1, 2),
-    rangeBreakoutPct: round(resistance > 0 ? (last.close - resistance) / resistance * 100 : 0, 2),
-    multiTimeframeAgreement: round(higherTimeframeBias / 3 * 100, 0),
+    rangeBreakoutPct: round(rangeBreakoutPct, 2),
+    multiTimeframeAgreement: 0,
   };
 }
 
-export function calculateRisk(indicators: IndicatorSummary, orderbook: OrderbookSummary, price: number): RiskSummary {
-  const trendScore = clamp((price > indicators.ema9 ? 25 : 0) + (indicators.ema9 > indicators.ema21 ? 25 : 0) + (indicators.ema21 > indicators.ema50 ? 25 : 0) + (price > indicators.vwap ? 25 : 0));
-  const momentumScore = clamp((indicators.rsi14 > 55 ? 25 : indicators.rsi14 < 45 ? -10 : 10) + (indicators.macdHistogram > 0 ? 35 : 5) + (indicators.takerBuyRatio > 0.55 ? 25 : 10) + (indicators.bodyPct > 55 ? 15 : 5));
-  const volatilityScore = clamp(indicators.atrPct * 14 + Math.abs(indicators.bollingerUpper - indicators.bollingerLower) / price * 400);
-  const volumeConfirmationScore = clamp((indicators.volumeMultiplier - 1) * 28 + Math.max(0, indicators.takerBuyRatio - 0.5) * 120);
-  const reversalRiskScore = clamp((indicators.rsi14 > 78 ? 32 : indicators.rsi14 < 25 ? 20 : 0) + (indicators.upperWickPct > 45 ? 25 : 0) + (indicators.volumeMultiplier > 4 ? 25 : 0) + (price > indicators.resistance * 0.995 ? 10 : 0));
-  const whaleRiskScore = clamp((orderbook.isThin ? 30 : 0) + (Math.abs(orderbook.imbalancePct) > 35 ? 22 : 0) + (orderbook.spreadPct > 0.08 ? 18 : 0) + (indicators.volumeMultiplier > 3 ? 18 : 0) + (indicators.takerBuyRatio > 0.7 || indicators.takerBuyRatio < 0.3 ? 12 : 0));
-  const pumpDumpRiskScore = clamp(reversalRiskScore * 0.35 + whaleRiskScore * 0.35 + volumeConfirmationScore * 0.2 + volatilityScore * 0.1);
+export function calculateRisk(indicators: IndicatorSummary, orderbook: OrderbookSummary, _price: number): RiskSummary {
+  const spreadRisk = clamp(orderbook.spreadPct * 600);
+  const takerPressure = Math.abs(indicators.takerBuyRatio - 0.5) * 200;
+  const trendScore = clamp(50 + indicators.vwapDistancePct * 12);
+  const momentumScore = clamp(takerPressure * 0.55 + indicators.bodyPct * 0.45);
+  const volatilityScore = clamp(indicators.atrPct * 22);
+  const volumeConfirmationScore = clamp(Math.max(0, indicators.volumeZScore) * 26);
+  const reversalRiskScore = clamp(Math.max(indicators.upperWickPct, indicators.lowerWickPct) * 0.55 + Math.max(0, indicators.volumeZScore) * 10 + volatilityScore * 0.25 + (indicators.rangeBreakout ? 8 : 0));
+  const whaleRiskScore = clamp((orderbook.isThin ? 35 : 0) + Math.abs(orderbook.imbalancePct) * 0.45 + spreadRisk * 0.35 + Math.max(0, indicators.volumeZScore) * 8 + takerPressure * 0.22);
+  const pumpDumpRiskScore = clamp(whaleRiskScore * 0.45 + reversalRiskScore * 0.25 + volumeConfirmationScore * 0.15 + volatilityScore * 0.15);
   const labels: string[] = [];
-  if (trendScore > 70 && volumeConfirmationScore > 45) labels.push("organic_breakout");
+  if (indicators.rangeBreakout && volumeConfirmationScore > 35 && !orderbook.isThin && orderbook.spreadPct < 0.08) labels.push("organic_breakout");
   if (reversalRiskScore > 55 && volumeConfirmationScore > 60) labels.push("fomo_trap");
   if (orderbook.isThin) labels.push("thin_orderbook");
   if (whaleRiskScore > 55) labels.push("possible_whale_push");
-  if (indicators.volumeZScore > 3) labels.push("abnormal_volume");
+  if (indicators.volumeZScore > 2.5) labels.push("abnormal_volume");
   if (indicators.tradeCountZScore > 2.5) labels.push("abnormal_trade_count");
-  if (indicators.candleExpansion > 2.2) labels.push("range_expansion");
-  if (indicators.priceAccelerationPct > 1.5) labels.push("price_acceleration");
-  if (indicators.rsi14 > 78) labels.push("overbought");
-  if (indicators.rsi14 < 28) labels.push("oversold");
+  if (indicators.rangeBreakout) labels.push("range_breakout");
+  if (orderbook.spreadPct > 0.08) labels.push("high_spread");
+  if (Math.abs(indicators.vwapDistancePct) > 1.5) labels.push("vwap_deviation");
   if (labels.length === 0) labels.push("balanced_market");
   return {
     trend_score: round(trendScore, 0),
@@ -353,11 +323,11 @@ export function calculateCause(indicators: IndicatorSummary, risk: RiskSummary, 
   const socialConfidence = Number(social.confidence || social.social_confidence || 0);
   const newsConfidence = Number(news.confidence || 0);
   const newsSocial = clamp((Number(social.mention_delta || 0) * 7 + socialConfidence * 0.6 + newsConfidence * 0.9 + Number(news.source_count || 0) * 8) / 2);
-  const technicalBreakout = clamp(risk.trend_score * 0.35 + risk.volume_confirmation_score * 0.25 + Math.max(0, indicators.rangeBreakoutPct) * 10 + indicators.multiTimeframeAgreement * 0.2 + Math.max(0, indicators.priceAccelerationPct) * 3);
-  const lowLiquidity = clamp((orderbook.isThin ? 45 : 0) + Math.max(0, orderbook.spreadPct - 0.03) * 250 + Math.abs(orderbook.imbalancePct) * 0.45);
-  const whale = clamp(risk.whale_risk_score * 0.45 + trades.largeTradeCount * 6 + Math.min(35, trades.largeTradeUsd / 150_000) + Math.max(0, trades.buyPressurePct - 58) * 0.8 + Math.max(0, trades.sellPressurePct - 58) * 0.8);
-  const fraudPump = clamp(risk.pump_dump_risk_score * 0.45 + risk.reversal_risk_score * 0.25 + lowLiquidity * 0.25 + (indicators.upperWickPct > 40 ? 18 : 0) + (indicators.volumeZScore > 3 ? 15 : 0));
-  const organic = clamp(technicalBreakout * 0.45 + risk.momentum_score * 0.25 + risk.volume_confirmation_score * 0.25 - fraudPump * 0.2 - lowLiquidity * 0.15);
+  const technicalBreakout = clamp((indicators.rangeBreakout ? 42 : 0) + risk.volume_confirmation_score * 0.28 + Math.abs(indicators.rangeBreakoutPct) * 8 + indicators.bodyPct * 0.18 + Math.max(0, Math.abs(indicators.vwapDistancePct) - 0.25) * 8);
+  const lowLiquidity = clamp((orderbook.isThin ? 50 : 0) + Math.max(0, orderbook.spreadPct - 0.03) * 320 + Math.abs(orderbook.imbalancePct) * 0.5);
+  const whale = clamp(risk.whale_risk_score * 0.35 + trades.largeTradeCount * 6 + Math.min(35, trades.largeTradeUsd / 150_000) + Math.max(0, trades.buyPressurePct - 58) * 0.8 + Math.max(0, trades.sellPressurePct - 58) * 0.8);
+  const fraudPump = clamp(risk.pump_dump_risk_score * 0.35 + lowLiquidity * 0.35 + risk.reversal_risk_score * 0.2 + (Math.max(indicators.upperWickPct, indicators.lowerWickPct) > 45 ? 14 : 0) + (indicators.volumeZScore > 2.5 ? 12 : 0));
+  const organic = clamp(technicalBreakout * 0.5 + risk.momentum_score * 0.2 + risk.volume_confirmation_score * 0.25 - fraudPump * 0.25 - lowLiquidity * 0.2);
   const scores = {
     organic: round(organic, 0),
     whale: round(whale, 0),

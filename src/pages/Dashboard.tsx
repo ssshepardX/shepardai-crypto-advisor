@@ -255,7 +255,7 @@ const DashboardPage = () => {
                     time: analysis.created_at,
                     risk_score: analysis.risk_json.pump_dump_risk_score,
                     price_change: analysis.risk_json.trend_score,
-                    volume_spike: analysis.indicator_json.volumeMultiplier,
+                    volume_spike: Math.max(0, analysis.indicator_json.volumeZScore),
                     summary: analysis.ai_summary_json.catalyst_summary_tr || analysis.ai_summary_json.summary_tr || 'Hareket kaynagi siniflandirildi',
                     likely_cause: analysis.cause_json?.likely_cause,
                     confidence: analysis.cause_json?.confidence_score,

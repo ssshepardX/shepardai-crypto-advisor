@@ -402,11 +402,12 @@ const CoinAnalysis = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="grid grid-cols-2 gap-3 text-sm">
-                    <InfoLine label="RSI 14" value={String(indicators.rsi14)} />
-                    <InfoLine label="MACD Hist" value={String(indicators.macdHistogram)} />
+                    <InfoLine label="VWAP" value={formatUsd(indicators.vwap)} />
+                    <InfoLine label="VWAP Distance" value={`${indicators.vwapDistancePct ?? 0}%`} />
                     <InfoLine label="ATR %" value={`${indicators.atrPct}%`} />
                     <InfoLine label="Volume Z" value={String(indicators.volumeZScore)} />
-                    <InfoLine label="Candle Expansion" value={`${indicators.candleExpansion}x`} />
+                    <InfoLine label="Body/Wick" value={String(indicators.bodyToWickRatio ?? 0)} />
+                    <InfoLine label="Range Breakout" value={indicators.rangeBreakout ? 'Yes' : 'No'} />
                     <InfoLine label="Support" value={formatUsd(indicators.support)} />
                     <InfoLine label="Resistance" value={formatUsd(indicators.resistance)} />
                   </CardContent>
