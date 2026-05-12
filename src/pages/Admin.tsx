@@ -46,11 +46,7 @@ const AdminLogin = () => {
   const navigate = useNavigate();
 
   const submit = async () => {
-    if (!PRIMARY_ADMIN_EMAIL) {
-      setError('VITE_ADMIN_EMAIL is missing');
-      return;
-    }
-    if (!isAdminEmail(email)) {
+    if (PRIMARY_ADMIN_EMAIL && !isAdminEmail(email)) {
       setError('Admin email not allowed');
       return;
     }
@@ -340,9 +336,8 @@ const BacktestsPanel = () => {
 const Admin = () => {
   const { session, loading } = useSession();
   if (loading) return null;
-  if (!PRIMARY_ADMIN_EMAIL) return <AdminLogin />;
   if (!session) return <AdminLogin />;
-  if (!isAdminEmail(session.user.email)) return <Navigate to="/" replace />;
+  if (PRIMARY_ADMIN_EMAIL && !isAdminEmail(session.user.email)) return <Navigate to="/" replace />;
   return <AdminPanel />;
 };
 
