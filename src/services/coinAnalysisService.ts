@@ -160,15 +160,48 @@ export class CoinAnalysisError extends Error {
   }
 }
 
+const ANALYSIS_SESSION_TTL_MS = 2 * 60 * 1000;
+const RECENT_SESSION_TTL_MS = 30 * 1000;
+
+function readSessionCache<T>(key: string): T | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { expiresAt: number; value: T };
+    if (parsed.expiresAt <= Date.now()) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    return parsed.value;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionCache<T>(key: string, value: T, ttlMs: number) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ value, expiresAt: Date.now() + ttlMs }));
+  } catch {
+    // Browser storage can be unavailable in private or restricted contexts.
+  }
+}
+
 export async function analyzeCoin(
   symbol: string,
   timeframe: AnalysisTimeframe,
   force = false,
   language = 'tr'
 ): Promise<CoinAnalysis> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const cacheKey = `analysis:${normalizedSymbol}:${timeframe}:${language}`;
+  if (!force) {
+    const cached = readSessionCache<CoinAnalysis>(cacheKey);
+    if (cached) return { ...cached, cache_hit: true, usage_counted: false };
+  }
+
   const { data, error } = await supabase.functions.invoke('analyze-coin', {
     method: 'POST',
-    body: { symbol, timeframe, force, language },
+    body: { symbol: normalizedSymbol, timeframe, force, language },
   });
 
   if (error) {
@@ -184,7 +217,9 @@ export async function analyzeCoin(
     throw new CoinAnalysisError(data.error, data);
   }
 
-  return data.analysis as CoinAnalysis;
+  const analysis = data.analysis as CoinAnalysis;
+  writeSessionCache(cacheKey, analysis, ANALYSIS_SESSION_TTL_MS);
+  return analysis;
 }
 
 export async function scanMarket(): Promise<CoinAnalysis[]> {
@@ -210,6 +245,9 @@ export async function scanMarket(): Promise<CoinAnalysis[]> {
 }
 
 export async function getRecentAnalyses(): Promise<CoinAnalysis[]> {
+  const cached = readSessionCache<CoinAnalysis[]>('recent-analyses');
+  if (cached) return cached;
+
   const { data, error } = await supabase.functions.invoke('analyze-coin', {
     method: 'GET',
   });
@@ -218,5 +256,7 @@ export async function getRecentAnalyses(): Promise<CoinAnalysis[]> {
     throw new Error(error.message || 'Failed to load recent analyses');
   }
 
-  return (data?.analyses || []) as CoinAnalysis[];
+  const analyses = (data?.analyses || []) as CoinAnalysis[];
+  writeSessionCache('recent-analyses', analyses, RECENT_SESSION_TTL_MS);
+  return analyses;
 }

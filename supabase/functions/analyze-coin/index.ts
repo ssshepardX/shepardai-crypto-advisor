@@ -1048,6 +1048,56 @@ async function readRecentAiSummary(symbol: string, timeframe: Timeframe, languag
   return summary?.language === language ? summary : null;
 }
 
+function riskBucket(score: number) {
+  if (score >= 70) return "high";
+  if (score >= 40) return "medium";
+  return "low";
+}
+
+async function readSemanticAiSummary(
+  symbol: string,
+  timeframe: Timeframe,
+  language: OutputLanguage,
+  cause: CauseSummary,
+  risk: RiskSummary,
+) {
+  const minCreatedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from("coin_analyses")
+    .select("ai_summary_json,cause_json,risk_json")
+    .eq("symbol", symbol)
+    .eq("timeframe", timeframe)
+    .gte("created_at", minCreatedAt)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const targetBucket = riskBucket(risk.pump_dump_risk_score);
+  const match = (data || []).find((row) => {
+    const summary = row.ai_summary_json as Record<string, unknown> | null;
+    const previousCause = row.cause_json as CauseSummary | null;
+    const previousRisk = row.risk_json as RiskSummary | null;
+    return summary?.language === language &&
+      previousCause?.likely_cause === cause.likely_cause &&
+      riskBucket(Number(previousRisk?.pump_dump_risk_score || 0)) === targetBucket;
+  });
+
+  return match?.ai_summary_json || null;
+}
+
+async function shouldDeepScan(symbol: string) {
+  const klines = await fetchKlines(symbol, "15m", 80);
+  if (klines.length < 60) return false;
+  const indicators = calculateIndicators(klines);
+  const latest = klines.at(-1);
+  const previous = klines.at(-2);
+  const movePct = latest && previous?.close ? Math.abs((latest.close - previous.close) / previous.close * 100) : 0;
+  return movePct >= 0.7 ||
+    indicators.volumeZScore >= 2 ||
+    indicators.rangeBreakout ||
+    indicators.candleExpansion >= 1.8 ||
+    Math.abs(indicators.vwapDistancePct) >= 1.2;
+}
+
 async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: AuthContext, force = false, language: OutputLanguage = "tr") {
   const symbol = normalizeSymbol(symbolInput);
   const timeframe = TIMEFRAMES.includes(timeframeInput as Timeframe) ? timeframeInput as Timeframe : "15m";
@@ -1090,7 +1140,8 @@ async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: Au
       news: news.status,
     },
   };
-  const recentAiSummary = await readRecentAiSummary(symbol, timeframe, language);
+  const recentAiSummary = await readRecentAiSummary(symbol, timeframe, language) ||
+    await readSemanticAiSummary(symbol, timeframe, language, cause, risk);
   if (recentAiSummary) {
     logAnalysisEvent("ai_summary_cache_hit", { symbol, timeframe, language });
   }
@@ -1162,6 +1213,7 @@ async function scanMarket(auth: AuthContext) {
   const analyzed = [];
   for (const symbol of symbols) {
     try {
+      if (!await shouldDeepScan(symbol)) continue;
       const result = await analyzeCoin(symbol, "15m", auth, false, "tr");
       const risk = result.risk_json as RiskSummary;
       const cause = result.cause_json as CauseSummary | undefined;

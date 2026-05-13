@@ -43,7 +43,36 @@ export class SentimentError extends Error {
   }
 }
 
+const SENTIMENT_SESSION_TTL_MS = 5 * 60 * 1000;
+
+function readSessionCache<T>(key: string): T | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { expiresAt: number; value: T };
+    if (parsed.expiresAt <= Date.now()) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    return parsed.value;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionCache<T>(key: string, value: T) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ value, expiresAt: Date.now() + SENTIMENT_SESSION_TTL_MS }));
+  } catch {
+    // Browser storage can be unavailable in private or restricted contexts.
+  }
+}
+
 async function invokeSentiment<T>(body: Record<string, unknown>): Promise<T> {
+  const cacheKey = `sentiment:${JSON.stringify(body)}`;
+  const cached = readSessionCache<T>(cacheKey);
+  if (cached) return cached;
+
   const { data, error } = await supabase.functions.invoke('sentiment-scan', {
     method: 'POST',
     body,
@@ -57,6 +86,7 @@ async function invokeSentiment<T>(body: Record<string, unknown>): Promise<T> {
     throw new SentimentError(error.message || 'Sentiment scan failed');
   }
   if (data?.error) throw new SentimentError(data.error, data);
+  writeSessionCache(cacheKey, data as T);
   return data as T;
 }
 
