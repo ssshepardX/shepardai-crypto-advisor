@@ -87,6 +87,7 @@ const DashboardPage = () => {
       const [sub, today] = await Promise.all([getCurrentSubscription(), getTodayUsage()]);
       setSubscription(sub);
       setUsage(today);
+      setPlanLoading(false);
       await loadMarketData();
       await loadSentiment(sub.plan);
     } finally {
@@ -157,9 +158,9 @@ const DashboardPage = () => {
       )}
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard icon={ShieldAlert} label="Plan" value={planLoading ? 'Checking' : subscription?.plan.toUpperCase() || 'FREE'} />
+        <MetricCard icon={ShieldAlert} label="Plan" value={subscription?.plan.toUpperCase() || 'FREE'} loading={planLoading && !subscription} />
         <MetricCard icon={Brain} label="Daily checks" value={`${usage?.ai_analysis_count || 0}/${entitlement.aiDailyLimit}`} />
-        <MetricCard icon={Activity} label="Scanner" value={planLoading ? 'Checking' : entitlement.canRunScanner ? 'Enabled' : `${entitlement.scannerDelayMinutes} min delay`} />
+        <MetricCard icon={Activity} label="Scanner" value={entitlement.canRunScanner ? 'Enabled' : `${entitlement.scannerDelayMinutes} min delay`} loading={planLoading && !subscription} />
         <MetricCard icon={Clock} label="Renewal" value={subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString('tr-TR') : '-'} />
       </div>
 
@@ -295,12 +296,16 @@ const DashboardPage = () => {
   );
 };
 
-const MetricCard = ({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) => (
+const MetricCard = ({ icon: Icon, label, value, loading = false }: { icon: React.ElementType; label: string; value: string; loading?: boolean }) => (
   <Card className="border-slate-800 bg-slate-900">
     <CardContent className="flex items-center justify-between p-4">
       <div>
         <p className="text-xs text-slate-500"><Trans text={label} /></p>
-        <p className="mt-1 text-xl font-semibold text-slate-100">{value}</p>
+        {loading ? (
+          <div className="mt-2 h-7 w-24 animate-pulse rounded bg-slate-800" />
+        ) : (
+          <p className="mt-1 text-xl font-semibold text-slate-100">{value}</p>
+        )}
       </div>
       <Icon className="h-6 w-6 text-cyan-400" />
     </CardContent>
