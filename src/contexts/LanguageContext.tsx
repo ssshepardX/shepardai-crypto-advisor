@@ -105,6 +105,9 @@ const dictionary: Partial<Record<AppLanguage, Record<string, string>>> = {
     'Preparing short summary': 'Kısa özet hazırlanıyor',
     Alert: 'Uyarı',
     'Volume spike': 'Hacim artışı',
+    'Volume Z': 'Hacim Z',
+    'Deterministic fallback': 'Deterministik özet',
+    'Cached analysis': 'Kayıtlı analiz',
 
     // --- Pricing ---
     Plans: 'Planlar',

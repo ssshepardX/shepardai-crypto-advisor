@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BarChart3, Brain, Clock, Flame, RefreshCw, ShieldAlert, Zap } from 'lucide-react';
 import AppShell from '@/components/AppShell';
 import ScanningCard from '@/components/ScanningCard';
-import { AlertData, getAlerts } from '@/services/alertsApi';
 import { CoinAnalysis, CoinAnalysisError, getRecentAnalyses, scanMarket } from '@/services/coinAnalysisService';
 import {
   getCurrentSubscription,
@@ -24,7 +23,6 @@ const starterPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DO
 
 const DashboardPage = () => {
   const { session, loading } = useSession();
-  const [alerts, setAlerts] = useState<AlertData[]>([]);
   const [recentAnalyses, setRecentAnalyses] = useState<CoinAnalysis[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [usage, setUsage] = useState<UserUsageDaily | null>(null);
@@ -38,14 +36,20 @@ const DashboardPage = () => {
     () => PLAN_ENTITLEMENTS[subscription?.plan || 'free'],
     [subscription?.plan]
   );
+  const meaningfulAnalyses = useMemo(
+    () => recentAnalyses.filter((analysis) =>
+      Boolean(analysis.cause_json?.likely_cause) &&
+      Number(analysis.cause_json?.confidence_score || 0) > 0 &&
+      Boolean(analysis.risk_json)
+    ),
+    [recentAnalyses]
+  );
 
   const loadMarketData = useCallback(async () => {
     try {
-      const [alertResponse, analyses] = await Promise.allSettled([getAlerts(), getRecentAnalyses()]);
-      if (alertResponse.status === 'fulfilled') setAlerts(alertResponse.value.alerts);
-      if (analyses.status === 'fulfilled') setRecentAnalyses(analyses.value);
+      const analyses = await getRecentAnalyses();
+      setRecentAnalyses(analyses);
     } catch {
-      setAlerts([]);
       setRecentAnalyses([]);
     }
   }, []);
@@ -240,14 +244,14 @@ const DashboardPage = () => {
         </CardContent>
       </Card>
 
-      {recentAnalyses.length > 0 && (
+      {meaningfulAnalyses.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-100"><Trans text="Recent movement checks" /></h2>
             <Badge className="bg-slate-800 text-slate-300">Cause cache</Badge>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {recentAnalyses.slice(0, 6).map((analysis) => (
+            {meaningfulAnalyses.slice(0, 6).map((analysis) => (
               <Link key={analysis.id} to={`/analysis/${analysis.symbol}`}>
                 <ScanningCard
                   realData={{
@@ -270,36 +274,6 @@ const DashboardPage = () => {
         </section>
       )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-100"><Trans text="Scanner results" /></h2>
-          <Badge className="bg-slate-800 text-slate-300">{alerts.length} <Trans text="results" /></Badge>
-        </div>
-        {alerts.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {alerts.slice(0, 12).map((scan) => (
-              <Link key={scan.id} to={`/analysis/${scan.symbol}`}>
-                <ScanningCard
-                  realData={{
-                    symbol: scan.symbol,
-                    time: scan.created_at,
-                    risk_score: scan.risk_score,
-                    price_change: scan.price_change || 0,
-                    volume_spike: scan.volume_spike || 1,
-                    summary: scan.summary || 'Scanner signal',
-                    ai_source: 'legacy_scanner',
-                    ai_fallback_reason: null,
-                  }}
-                />
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-md border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-400">
-            <Trans text="No scanner result yet." />
-          </div>
-        )}
-      </section>
     </AppShell>
   );
 };
