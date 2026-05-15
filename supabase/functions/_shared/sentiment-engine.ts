@@ -175,6 +175,19 @@ async function rssFeed(url: string, provider: "news" | "asia_watch", symbol: str
   return Promise.all(rows.map((row) => item(provider, row.title, row.snippet, row.link, row.created)));
 }
 
+async function rssFeedAll(url: string, provider: "news" | "asia_watch") {
+  const response = await fetch(url, { headers: { "User-Agent": "ShepardAI/1.0" } });
+  if (!response.ok) throw new Error(`rss_${response.status}`);
+  const xml = await response.text();
+  return [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)].map((match) => match[0]).slice(0, 30).map((block) => ({
+    provider,
+    title: tag(block, "title"),
+    snippet: tag(block, "description"),
+    link: tag(block, "link"),
+    created: tag(block, "pubDate"),
+  })).filter((row) => row.title);
+}
+
 async function rssSearch(symbol: string, provider: "news" | "asia_watch", feeds: string[]): Promise<{ status: string; items: SentimentItem[]; error?: string }> {
   try {
     const settled = await Promise.allSettled(feeds.map((feed) => rssFeed(feed, provider, symbol)));
@@ -348,6 +361,39 @@ export async function scanSymbolSentiment(symbolInput: string, rank?: number): P
     coinGeckoNews(symbol),
   ]);
   return aggregate(symbol, { news, asia_watch: asia, reddit, cryptopanic: panic, coingecko: gecko, x: xStatus() }, rank);
+}
+
+export async function scanMarketSentiment(limit = 12): Promise<SentimentResult[]> {
+  const symbols = await defaultMarketSymbols(limit);
+  const [newsSettled, asiaSettled] = await Promise.all([
+    Promise.allSettled(NEWS_FEEDS.map((feed) => rssFeedAll(feed, "news"))),
+    Promise.allSettled(ASIA_FEEDS.map((feed) => rssFeedAll(feed, "asia_watch"))),
+  ]);
+  const newsRows = newsSettled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  const asiaRows = asiaSettled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  const failedNews = newsSettled.filter((result) => result.status === "rejected").length;
+  const failedAsia = asiaSettled.filter((result) => result.status === "rejected").length;
+
+  const results: SentimentResult[] = [];
+  for (let index = 0; index < symbols.length; index++) {
+    const symbol = symbols[index];
+    const newsMatches = newsRows.filter((row) => matchesSymbol(symbol, `${row.title} ${row.snippet}`)).slice(0, 8);
+    const asiaMatches = asiaRows.filter((row) => matchesSymbol(symbol, `${row.title} ${row.snippet}`)).slice(0, 8);
+    const [newsItems, asiaItems] = await Promise.all([
+      Promise.all(newsMatches.map((row) => item("news", row.title, row.snippet, row.link, row.created))),
+      Promise.all(asiaMatches.map((row) => item("asia_watch", row.title, row.snippet, row.link, row.created))),
+    ]);
+    const result = aggregate(symbol, {
+      news: { status: newsItems.length || failedNews < NEWS_FEEDS.length ? "configured" : "provider_error", items: newsItems, error: failedNews ? `${failedNews}_feed_failed` : undefined },
+      asia_watch: { status: asiaItems.length || failedAsia < ASIA_FEEDS.length ? "configured" : "provider_error", items: asiaItems, error: failedAsia ? `${failedAsia}_feed_failed` : undefined },
+      reddit: { status: "disabled_rss_only_mode", items: [] },
+      cryptopanic: { status: "disabled_free_mode", items: [] },
+      coingecko: { status: "disabled_free_mode", items: [] },
+      x: xStatus(),
+    }, index + 1);
+    if (result.score_json.source_count > 0) results.push(result);
+  }
+  return results.sort((a, b) => (b.score_json.mention_score + b.score_json.source_confidence * 0.25) - (a.score_json.mention_score + a.score_json.source_confidence * 0.25));
 }
 
 export async function defaultMarketSymbols(limit = 20) {

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { defaultMarketSymbols, scanSymbolSentiment } from "../_shared/sentiment-engine.ts";
+import { scanMarketSentiment, scanSymbolSentiment } from "../_shared/sentiment-engine.ts";
 import { adminEmails, hasValidCronSecret, json, serviceClient } from "../_shared/admin-auth.ts";
 import { normalizeSymbol } from "../_shared/analysis-engine.ts";
 
@@ -149,14 +149,8 @@ async function marketScan(limitInput: unknown) {
   const cached = await readCached("MARKET", "market");
   if (cached) return { trends: cached.trend_json?.trends || [], summary: cached.score_json || {}, cache_hit: true, created_at: cached.created_at };
 
-  const symbols = await defaultMarketSymbols(limit);
-  const trends = [];
-  for (let i = 0; i < symbols.length; i++) {
-    const result = await scanSymbolSentiment(symbols[i], i + 1);
-    if (result.score_json.source_count > 0) trends.push(result);
-    await updateSources(result as unknown as Record<string, unknown>);
-  }
-  trends.sort((a, b) => (b.score_json.mention_score + b.score_json.source_confidence * 0.25) - (a.score_json.mention_score + a.score_json.source_confidence * 0.25));
+  const trends = await scanMarketSentiment(limit);
+  for (const result of trends) await updateSources(result as unknown as Record<string, unknown>);
   const summary = {
     most_mentioned: trends[0]?.symbol || null,
     news_mood: trends.length ? Math.round(trends.reduce((sum, item) => sum + item.score_json.sentiment_score, 0) / trends.length) : 50,
