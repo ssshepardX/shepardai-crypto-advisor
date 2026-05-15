@@ -103,12 +103,58 @@ async function invokeSentiment<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 export async function getMarketSentiment(limit = 3) {
-  return invokeSentiment<{
+  const cacheKey = `sentiment-cache:market:${limit}`;
+  const cached = readSessionCache<{
+    trends: SentimentResult[];
+    summary: { most_mentioned: string | null; news_mood: number; reddit_heat: number; asia_watch: number };
+    cache_hit: boolean;
+    created_at: string;
+  }>(cacheKey);
+  if (cached) return cached;
+
+  const { data, error } = await supabase
+    .from('sentiment_snapshots')
+    .select('trend_json, score_json, created_at')
+    .eq('symbol', 'MARKET')
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new SentimentError('Trend cache could not be loaded.');
+
+  const trendJson = (data?.trend_json || {}) as { trends?: SentimentResult[] };
+  const scoreJson = (data?.score_json || {}) as Partial<{
+    most_mentioned: string | null;
+    news_mood: number;
+    reddit_heat: number;
+    asia_watch: number;
+  }>;
+
+  const result = {
+    trends: (trendJson.trends || []).slice(0, limit),
+    summary: {
+      most_mentioned: scoreJson.most_mentioned || null,
+      news_mood: Number(scoreJson.news_mood || 0),
+      reddit_heat: Number(scoreJson.reddit_heat || 0),
+      asia_watch: Number(scoreJson.asia_watch || 0),
+    },
+    cache_hit: true,
+    created_at: data?.created_at || '',
+  };
+  writeSessionCache(cacheKey, result, SENTIMENT_SESSION_TTL_MS);
+  return result;
+}
+
+export async function refreshMarketSentiment(limit = 3) {
+  const data = await invokeSentiment<{
     trends: SentimentResult[];
     summary: { most_mentioned: string | null; news_mood: number; reddit_heat: number; asia_watch: number };
     cache_hit: boolean;
     created_at: string;
   }>({ mode: 'market', limit });
+  sessionStorage.removeItem(`sentiment-cache:market:${limit}`);
+  return data;
 }
 
 export async function getCoinSentiment(symbol: string) {

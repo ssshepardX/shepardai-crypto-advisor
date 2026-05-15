@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Trans } from '@/contexts/LanguageContext';
-import { getMarketSentiment, SentimentError, SentimentResult } from '@/services/sentimentService';
+import { getMarketSentiment, refreshMarketSentiment, SentimentError, SentimentResult } from '@/services/sentimentService';
 import { cn } from '@/lib/utils';
 
 const starterPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT'];
@@ -88,6 +88,30 @@ const DashboardPage = () => {
       setSentimentLoading(false);
     }
   }, []);
+
+  const runTrendRefresh = async () => {
+    setSentimentError(null);
+    if ((subscription?.plan || 'free') === 'free') {
+      setSentimentLocked(true);
+      return;
+    }
+    setSentimentLoading(true);
+    try {
+      await refreshMarketSentiment(12);
+      const data = await getMarketSentiment(12);
+      setSentimentTrends(data.trends);
+      setSentimentSummary(data.summary);
+      setLastSentimentAt(data.created_at || new Date().toISOString());
+    } catch {
+      const data = await getMarketSentiment(12);
+      setSentimentTrends(data.trends);
+      setSentimentSummary(data.summary);
+      setLastSentimentAt(data.created_at || null);
+      setSentimentError(data.trends.length ? null : 'Latest RSS sweep is not ready yet.');
+    } finally {
+      setSentimentLoading(false);
+    }
+  };
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
@@ -198,7 +222,7 @@ const DashboardPage = () => {
             {sentimentLocked ? (
               <Button asChild className="bg-cyan-500 hover:bg-cyan-600"><Link to="/pricing">Upgrade</Link></Button>
             ) : (
-              <Button onClick={() => loadSentiment(subscription?.plan || 'free')} disabled={sentimentLoading} variant="outline" className="border-slate-700 bg-slate-950">
+              <Button onClick={runTrendRefresh} disabled={sentimentLoading} variant="outline" className="border-slate-700 bg-slate-950">
                 <RefreshCw className={cn('mr-2 h-4 w-4', sentimentLoading && 'animate-spin')} />
                 Refresh
               </Button>
@@ -253,7 +277,7 @@ const DashboardPage = () => {
               <p className="mt-1 text-sm text-slate-400">
                 {sentimentError || 'RSS sources did not return coin-specific news with a source link. No placeholder cards are shown.'}
               </p>
-              <Button onClick={() => loadSentiment(subscription?.plan || 'free')} disabled={sentimentLoading} variant="outline" className="mt-4 border-slate-700 bg-slate-900">
+              <Button onClick={runTrendRefresh} disabled={sentimentLoading} variant="outline" className="mt-4 border-slate-700 bg-slate-900">
                 <RefreshCw className={cn('mr-2 h-4 w-4', sentimentLoading && 'animate-spin')} />
                 Run trend sweep
               </Button>
