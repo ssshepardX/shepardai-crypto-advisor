@@ -75,13 +75,13 @@ If DB push fails on Windows with pooler/network errors, verify:
 ## Deploy Edge Functions
 
 ```bash
-supabase functions deploy analyze-coin
-supabase functions deploy sentiment-scan
-supabase functions deploy admin-api
-supabase functions deploy create-checkout
-supabase functions deploy creem-webhook
-supabase functions deploy market-snapshot
-supabase functions deploy run-backtest
+supabase functions deploy analyze-coin --project-ref wwdnuxpzsmdbeffhdsoy
+supabase functions deploy sentiment-scan --project-ref wwdnuxpzsmdbeffhdsoy
+supabase functions deploy admin-api --project-ref wwdnuxpzsmdbeffhdsoy
+supabase functions deploy create-checkout --project-ref wwdnuxpzsmdbeffhdsoy
+supabase functions deploy creem-webhook --project-ref wwdnuxpzsmdbeffhdsoy
+supabase functions deploy market-snapshot --project-ref wwdnuxpzsmdbeffhdsoy
+supabase functions deploy run-backtest --project-ref wwdnuxpzsmdbeffhdsoy
 ```
 
 ## Vercel Deploy

@@ -105,6 +105,7 @@ SCANNER_REQUIRES_TRADER
 ## `sentiment-scan`
 
 RSS-only sentiment/trend endpoint.
+Primary use is cache generation. Dashboard should prefer reading `sentiment_snapshots` cache first.
 
 ### Market Mode
 
@@ -137,6 +138,13 @@ Free users receive:
 ```txt
 SENTIMENT_REQUIRES_PRO
 ```
+
+### Runtime Behavior
+
+- market sweep writes into `sentiment_snapshots`
+- dashboard refresh may trigger the function
+- initial dashboard load should not depend on live function success
+- no fake market-volume fallback should be generated
 
 ## `create-checkout`
 
@@ -205,3 +213,11 @@ Modes:
 historical_kline
 snapshot
 ```
+
+## Cache-First Dashboard Pattern
+
+Dashboard sections should behave like this:
+
+- `Trend Intelligence`: read `sentiment_snapshots` cache, then optional manual refresh
+- `Movement scanner`: read `coin_analyses` cache, cron keeps it warm
+- empty cache should produce clean empty state, not placeholder/fake cards

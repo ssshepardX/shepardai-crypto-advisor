@@ -17,10 +17,10 @@ The app is not a direct price prediction or trade signal system.
 ```txt
 React/Vite UI
   -> Supabase Auth
+  -> Supabase Postgres cache/tables
   -> Supabase Edge Functions
   -> Binance public APIs
   -> RSS news feeds
-  -> Supabase Postgres cache/tables
   -> AI provider only for short summary
 ```
 
@@ -48,6 +48,7 @@ Important routes:
 ## Backend
 
 Supabase Edge Functions are the backend boundary. Browser clients should not call third-party private APIs directly.
+Dashboard trend and scanner sections are cache-first. They read Postgres-backed cache first and only use Edge Functions for manual refresh flows.
 
 Important functions:
 
@@ -104,7 +105,14 @@ Cache hits:
 - return existing DB result
 - do not call AI
 - do not increment usage
-- do not refetch Binance/orderbook/RSS
+- do not refetch Binance/orderbook
+
+Sentiment cache:
+
+- market snapshot cache lives in `sentiment_snapshots`
+- market sweep uses RSS-only sources
+- dashboard reads cached market sweep results first
+- manual refresh can trigger a new sweep, but UI should still fall back to cache
 
 ## AI Role
 

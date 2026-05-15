@@ -12,13 +12,14 @@ Production domain: https://shepardai.pro
 - Whale, liquidity, manipulation, and fraud/pump risk scoring
 - TradingView-style chart using live Binance market data
 - 15-minute shared analysis cache per symbol, timeframe, and language
-- RSS-only sentiment MVP for free operation
+- RSS-only sentiment intelligence with DB cache
 - AI summary in selected language
 - Supabase Auth with email OTP and Google login
 - Creem subscription integration
 - Admin panel
 - Backtest and market snapshot tooling
 - Capacitor Android/iOS shell
+- Telegram Mini App support
 
 ## Tech Stack
 
@@ -67,6 +68,12 @@ Lint:
 ```bash
 pnpm lint
 ```
+
+Deploy note:
+
+- frontend deploy: push to `main`
+- Supabase Edge Functions deploy separately
+- dashboard trend/scanner cards read DB cache first
 
 ## Important Positioning
 

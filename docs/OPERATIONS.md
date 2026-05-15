@@ -33,8 +33,8 @@ Important Edge Function log events:
 Core controls:
 
 - analysis cache: 15 minutes
-- sentiment market cache: 6 hours
-- sentiment coin cache: 12 hours
+- sentiment market cache: 60 minutes when signal exists, 15 minutes when empty
+- sentiment coin cache: 12 hours when signal exists, 60 minutes when empty
 - free plan AI limit: 3/day
 - pro AI limit: 50/day
 - trader AI limit: 250/day
@@ -47,6 +47,7 @@ Core controls:
 4. Push frontend changes to GitHub.
 5. Confirm GitHub Actions passed.
 6. Smoke test production domain.
+7. If cron SQL changed, verify `cron.job` entries match current docs.
 
 ## Smoke Test
 
@@ -131,6 +132,8 @@ Check:
 - `sentiment_snapshots`
 - function logs
 - Pro/Trader/admin entitlement
+- cron timeout/auth headers
+- market sweep runtime cost if feed count increased
 
 ### Cron not running
 
@@ -140,6 +143,12 @@ Check:
 select * from cron.job;
 select * from cron.job_run_details order by start_time desc limit 50;
 ```
+
+Current important jobs:
+
+- `market-snapshot-5m`
+- `market-scanner-cache-15m`
+- `sentiment-scan-cache-15m`
 
 ## Backup Notes
 

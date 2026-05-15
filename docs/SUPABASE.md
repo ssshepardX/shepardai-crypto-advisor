@@ -106,25 +106,35 @@ Supabase Cron invokes Edge Functions using `pg_cron` and `pg_net`.
 Recommended jobs:
 
 - market snapshots: every 5 minutes
-- sentiment scan: every 6 hours
+- market scanner cache: every 15 minutes
+- sentiment scan cache: every 15 minutes
 
-Sentiment scan free-safe example:
+Current cache jobs:
 
 ```sql
 select cron.schedule(
-  'sentiment-scan-6h',
-  '0 */6 * * *',
+  'sentiment-scan-cache-15m',
+  '*/15 * * * *',
   $$
   select net.http_post(
     url := 'https://wwdnuxpzsmdbeffhdsoy.supabase.co/functions/v1/sentiment-scan',
     headers := jsonb_build_object(
-      'Content-Type', 'application/json',
+      'content-type', 'application/json',
+      'apikey', 'SUPABASE_ANON_KEY',
+      'authorization', 'Bearer SUPABASE_ANON_KEY',
       'x-cron-secret', 'CRON_SECRET_VALUE'
     ),
-    body := jsonb_build_object('mode', 'market', 'limit', 3)
+    body := jsonb_build_object('mode', 'market', 'limit', 12),
+    timeout_milliseconds := 30000
   );
   $$
 );
+```
+
+Scanner cache follows the same pattern against `analyze-coin` with:
+
+```json
+{ "mode": "scan-market" }
 ```
 
 Inspect cron jobs:

@@ -86,31 +86,39 @@ top_catalyst_terms
 Market trend cache:
 
 ```txt
-6 hours
+60 minutes when a verified RSS signal exists
+15 minutes when the sweep is empty
 ```
 
 Coin sentiment cache:
 
 ```txt
-12 hours
+12 hours when signal exists
+60 minutes when empty
 ```
 
 ## Free Operation Rules
 
-Keep market scan limit low:
+Keep market scan limit low or moderate:
 
 ```json
 {
   "mode": "market",
-  "limit": 3
+  "limit": 12
 }
 ```
 
-Do not schedule frequent RSS scans. Recommended:
+Current production pattern:
 
 ```txt
-every 6 hours
+every 15 minutes
 ```
+
+Implementation note:
+
+- market sweep now fetches RSS feeds once, then classifies matching coins locally
+- this replaced the older per-coin-per-feed sweep that timed out
+- dashboard should read cache first and show empty state if no verified catalyst exists
 
 ## Optional Reddit
 
