@@ -82,9 +82,12 @@ async function invokeSentiment<T>(body: Record<string, unknown>): Promise<T> {
   const cached = readSessionCache<T>(cacheKey);
   if (cached) return cached;
 
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
   const { data, error } = await supabase.functions.invoke('sentiment-scan', {
     method: 'POST',
     body,
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
   });
   if (error) {
     const context = 'context' in error ? error.context : null;
