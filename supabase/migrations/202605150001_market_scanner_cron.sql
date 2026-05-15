@@ -9,6 +9,9 @@ begin
   if exists (select 1 from cron.job where jobname = 'sentiment-scan-cache-15m') then
     perform cron.unschedule('sentiment-scan-cache-15m');
   end if;
+  if exists (select 1 from cron.job where jobname = 'market-overview-cache-5m') then
+    perform cron.unschedule('market-overview-cache-5m');
+  end if;
 end $$;
 
 select cron.schedule(
@@ -41,6 +44,24 @@ select cron.schedule(
       'x-cron-secret', current_setting('app.cron_secret', true)
     ),
     body := jsonb_build_object('mode', 'market', 'limit', 12)
+  );
+  $$
+);
+
+select cron.schedule(
+  'market-overview-cache-5m',
+  '*/5 * * * *',
+  $$
+  select net.http_post(
+    url := 'https://wwdnuxpzsmdbeffhdsoy.supabase.co/functions/v1/market-overview',
+    headers := jsonb_build_object(
+      'content-type', 'application/json',
+      'apikey', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3ZG51eHB6c21kYmVmZmhkc295Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NjQzNTEsImV4cCI6MjA5MzA0MDM1MX0.1lhsZsyvSKRK40CDmpXrp5EOOiMTCu235LOIQ5-_ReM',
+      'authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3ZG51eHB6c21kYmVmZmhkc295Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NjQzNTEsImV4cCI6MjA5MzA0MDM1MX0.1lhsZsyvSKRK40CDmpXrp5EOOiMTCu235LOIQ5-_ReM',
+      'x-cron-secret', current_setting('app.cron_secret', true)
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 30000
   );
   $$
 );

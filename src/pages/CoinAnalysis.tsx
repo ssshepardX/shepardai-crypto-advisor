@@ -144,7 +144,15 @@ const CoinAnalysis = () => {
   const aiSummary = analysis?.ai_summary_json;
   const risk = analysis?.risk_json;
   const indicators = analysis?.indicator_json;
+  const continuation = analysis?.continuation_json;
   const entitlement = PLAN_ENTITLEMENTS[subscription?.plan || 'free'];
+  const topGainers = marketCoins.slice().sort((a, b) => b.priceChangePercent - a.priceChangePercent).slice(0, 6);
+  const topLosers = marketCoins.slice().sort((a, b) => a.priceChangePercent - b.priceChangePercent).slice(0, 6);
+  const trendCoins = marketCoins.slice().sort((a, b) => {
+    const aScore = Math.abs(a.priceChangePercent) * 0.65 + Math.log10(Math.max(a.quoteVolume, 1)) * 0.35;
+    const bScore = Math.abs(b.priceChangePercent) * 0.65 + Math.log10(Math.max(b.quoteVolume, 1)) * 0.35;
+    return bScore - aScore;
+  }).slice(0, 6);
 
   useEffect(() => {
     if (!analysis || !entitlement.canViewAdvancedRisk) {
@@ -307,6 +315,12 @@ const CoinAnalysis = () => {
         </section>
 
         <section className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-3">
+            <MiniCoinStrip title="Top Gainers" coins={topGainers} activeSymbol={symbol} onSelect={setSymbol} positive />
+            <MiniCoinStrip title="Top Losers" coins={topLosers} activeSymbol={symbol} onSelect={setSymbol} />
+            <MiniCoinStrip title="Trend Coins" coins={trendCoins} activeSymbol={symbol} onSelect={setSymbol} neutral />
+          </div>
+
           {chartExpanded && <div className="fixed inset-0 z-40 bg-slate-950/80" />}
           <Card className={cn('border-slate-800 bg-slate-900', chartExpanded && 'fixed inset-3 z-50 flex flex-col')}>
             <CardHeader className="space-y-3">
@@ -366,6 +380,14 @@ const CoinAnalysis = () => {
                 <MetricCard icon={ShieldAlert} label="Manipulation risk" value={analysis.cause_json?.early_warning_score ?? risk.pump_dump_risk_score} danger />
               </div>
 
+              {continuation && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <MetricCard icon={TrendingUp} label="Move persistence" value={continuation.continuation_score_15m} />
+                  <MetricCard icon={Activity} label="Follow-through probability" value={continuation.continuation_score_1h} />
+                  <MetricCard icon={Waves} label="Likely fade risk" value={continuation.continuation_label === 'likely_fade' ? 100 - continuation.continuation_score_15m : 100 - continuation.continuation_score_1h} danger />
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <Card className="border-slate-800 bg-slate-900">
                   <CardHeader>
@@ -410,6 +432,8 @@ const CoinAnalysis = () => {
                     <InfoLine label="Range Breakout" value={indicators.rangeBreakout ? 'Yes' : 'No'} />
                     <InfoLine label="Support" value={formatUsd(indicators.support)} />
                     <InfoLine label="Resistance" value={formatUsd(indicators.resistance)} />
+                    {continuation && <InfoLine label="Follow-through" value={continuation.continuation_label} />}
+                    {continuation && <InfoLine label="Continuation reasons" value={continuation.continuation_reasons.join(', ') || '-'} />}
                   </CardContent>
                 </Card>
               </div>
@@ -542,6 +566,52 @@ const InfoLine = ({ label, value }: { label: string; value: string }) => (
     <div className="text-xs text-slate-500"><Trans text={label} /></div>
     <div className="font-mono text-slate-200">{value}</div>
   </div>
+);
+
+const MiniCoinStrip = ({
+  title,
+  coins,
+  activeSymbol,
+  onSelect,
+  positive = false,
+  neutral = false,
+}: {
+  title: string;
+  coins: CoinData[];
+  activeSymbol: string;
+  onSelect: (symbol: string) => void;
+  positive?: boolean;
+  neutral?: boolean;
+}) => (
+  <Card className="border-slate-800 bg-slate-900">
+    <CardHeader>
+      <CardTitle className="text-base">{title}</CardTitle>
+    </CardHeader>
+    <CardContent className="grid gap-2">
+      {coins.map((coin) => (
+        <button
+          key={`${title}-${coin.symbol}`}
+          type="button"
+          onClick={() => onSelect(coin.symbol)}
+          className={cn(
+            'flex items-center justify-between rounded-md border px-3 py-2 text-left transition',
+            activeSymbol === coin.symbol ? 'border-cyan-500/40 bg-slate-950' : 'border-slate-800 bg-slate-950 hover:border-slate-700'
+          )}
+        >
+          <div>
+            <div className="font-semibold text-slate-100">{coin.symbol.replace('USDT', '')}</div>
+            <div className="text-xs text-slate-500">{formatUsd(coin.price)}</div>
+          </div>
+          <div className={cn(
+            'text-sm font-semibold',
+            neutral ? 'text-cyan-300' : positive ? 'text-emerald-300' : 'text-rose-300'
+          )}>
+            {coin.priceChangePercent > 0 ? '+' : ''}{coin.priceChangePercent.toFixed(2)}%
+          </div>
+        </button>
+      ))}
+    </CardContent>
+  </Card>
 );
 
 export default CoinAnalysis;

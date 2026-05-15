@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BarChart3, Brain, Clock, ExternalLink, Flame, ShieldAlert, Zap } from 'lucide-react';
 import AppShell from '@/components/AppShell';
 import ScanningCard from '@/components/ScanningCard';
+import Sparkline from '@/components/Sparkline';
 import { CoinAnalysis, getRecentAnalyses } from '@/services/coinAnalysisService';
+import { getMarketOverview, MarketOverviewPayload } from '@/services/marketOverviewService';
 import {
   getCurrentSubscription,
   getTodayUsage,
@@ -16,7 +18,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Trans } from '@/contexts/LanguageContext';
-import { getMarketSentiment, SentimentError, SentimentResult } from '@/services/sentimentService';
 import { cn } from '@/lib/utils';
 
 const starterPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT'];
@@ -26,14 +27,12 @@ const DashboardPage = () => {
   const [recentAnalyses, setRecentAnalyses] = useState<CoinAnalysis[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [usage, setUsage] = useState<UserUsageDaily | null>(null);
-  const [sentimentTrends, setSentimentTrends] = useState<SentimentResult[]>([]);
-  const [sentimentSummary, setSentimentSummary] = useState<{ most_mentioned: string | null; news_mood: number; reddit_heat: number; asia_watch: number } | null>(null);
+  const [overview, setOverview] = useState<MarketOverviewPayload | null>(null);
   const [sentimentLocked, setSentimentLocked] = useState(false);
-  const [sentimentError, setSentimentError] = useState<string | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [sentimentLoading, setSentimentLoading] = useState(false);
+  const [overviewLoading, setOverviewLoading] = useState(false);
   const [planLoading, setPlanLoading] = useState(true);
-  const [lastSentimentAt, setLastSentimentAt] = useState<string | null>(null);
 
   const entitlement = useMemo(
     () => PLAN_ENTITLEMENTS[subscription?.plan || 'free'],
@@ -48,31 +47,10 @@ const DashboardPage = () => {
     [recentAnalyses]
   );
   const latestAnalysisAt = meaningfulAnalyses[0]?.created_at || null;
-  const hotNewsItems = useMemo(() => {
-    const seen = new Set<string>();
-    return sentimentTrends
-      .flatMap((trend) =>
-        trend.source_json.items.map((item) => ({
-          ...item,
-          symbol: trend.symbol,
-          sentimentLabel: trend.score_json.sentiment_label,
-          sentimentScore: trend.score_json.sentiment_score,
-        }))
-      )
-      .filter((item) => item.url && item.title)
-      .filter((item) => {
-        const key = item.url || item.title || '';
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .sort((a, b) => {
-        const scoreDiff = b.score - a.score;
-        if (scoreDiff !== 0) return scoreDiff;
-        return new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime();
-      })
-      .slice(0, 6);
-  }, [sentimentTrends]);
+  const hotNewsItems = overview?.trend_news.items || [];
+  const scannerItems = overview?.scanner.items || [];
+  const gainers = overview?.gainers.items || [];
+  const losers = overview?.losers.items || [];
 
   const loadMarketData = useCallback(async () => {
     try {
@@ -83,31 +61,22 @@ const DashboardPage = () => {
     }
   }, []);
 
-  const loadSentiment = useCallback(async (plan: string) => {
-    setSentimentError(null);
+  const loadOverview = useCallback(async (plan: string) => {
+    setOverviewError(null);
     if (plan === 'free') {
       setSentimentLocked(true);
-      setSentimentTrends([]);
       return;
     }
-    setSentimentLoading(true);
+    setOverviewLoading(true);
     try {
-      const data = await getMarketSentiment(12);
-      setSentimentTrends(data.trends);
-      setSentimentSummary(data.summary);
-      setLastSentimentAt(data.created_at || new Date().toISOString());
+      const data = await getMarketOverview();
+      setOverview(data);
       setSentimentLocked(false);
     } catch (err) {
-      if (err instanceof SentimentError && err.code === 'SENTIMENT_REQUIRES_PRO') {
-        setSentimentLocked(true);
-        setSentimentTrends([]);
-        return;
-      }
       setSentimentLocked(false);
-      setSentimentTrends([]);
-      setSentimentError(err instanceof Error ? err.message : 'Trend intelligence could not be loaded.');
+      setOverviewError(err instanceof Error ? err.message : 'Market overview could not be loaded.');
     } finally {
-      setSentimentLoading(false);
+      setOverviewLoading(false);
     }
   }, []);
 
@@ -120,22 +89,22 @@ const DashboardPage = () => {
       setUsage(today);
       setPlanLoading(false);
       await loadMarketData();
-      await loadSentiment(sub.plan);
+      await loadOverview(sub.plan);
     } finally {
       setIsLoading(false);
       setPlanLoading(false);
     }
-  }, [loadMarketData, loadSentiment]);
+  }, [loadMarketData, loadOverview]);
 
   useEffect(() => {
     document.body.className = 'dark';
     loadDashboard();
     const interval = window.setInterval(() => {
       loadMarketData();
-      if (subscription?.plan && subscription.plan !== 'free') loadSentiment(subscription.plan);
+      if (subscription?.plan && subscription.plan !== 'free') loadOverview(subscription.plan);
     }, 60000);
     return () => window.clearInterval(interval);
-  }, [loadDashboard, loadMarketData, loadSentiment, subscription?.plan]);
+  }, [loadDashboard, loadMarketData, loadOverview, subscription?.plan]);
 
   if (loading) {
     return (
@@ -166,19 +135,20 @@ const DashboardPage = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard icon={Flame} label="Most Mentioned" value={sentimentLocked ? 'PRO' : sentimentSummary?.most_mentioned?.replace('USDT', '') || '-'} />
-        <MetricCard icon={Activity} label="News Mood" value={sentimentLocked ? 'Locked' : `${sentimentSummary?.news_mood ?? 0}/100`} />
-        <MetricCard icon={Zap} label="Reddit Heat" value={sentimentLocked ? 'Locked' : `${sentimentSummary?.reddit_heat ?? 0}/100`} />
-        <MetricCard icon={Clock} label="Asia Watch" value={sentimentLocked ? 'Locked' : `${sentimentSummary?.asia_watch ?? 0}/100`} />
+        <MetricCard icon={Flame} label="Most Mentioned" value={sentimentLocked ? 'PRO' : overview?.trend_news.most_mentioned?.replace('USDT', '') || '-'} />
+        <MetricCard icon={ArrowUpRight} label="Top Gainer" value={gainers[0]?.symbol?.replace('USDT', '') || '-'} />
+        <MetricCard icon={ArrowDownRight} label="Top Loser" value={losers[0]?.symbol?.replace('USDT', '') || '-'} />
+        <MetricCard icon={Zap} label="Scanner Hits" value={String(scannerItems.length || 0)} />
       </div>
 
+      <div className="grid gap-4 xl:grid-cols-2">
       <Card className="border-slate-800 bg-slate-900">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
           <div>
             <CardTitle className="text-base"><Trans text="Trend Intelligence" /></CardTitle>
             <p className="mt-1 text-sm text-slate-400"><Trans text="Highest-value cached RSS items from the last automated sweep." /></p>
             <p className="mt-2 text-xs text-slate-500">
-              {lastSentimentAt ? `Auto sweep ${new Date(lastSentimentAt).toLocaleTimeString('tr-TR')}` : 'Waiting for RSS cache'}
+              {overview?.trend_news.created_at ? `Auto sweep ${new Date(overview.trend_news.created_at).toLocaleTimeString('tr-TR')}` : 'Waiting for RSS cache'}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -189,7 +159,7 @@ const DashboardPage = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {sentimentLoading && !hotNewsItems.length ? (
+          {overviewLoading && !hotNewsItems.length ? (
             <div className="grid gap-3 lg:grid-cols-2">
               {Array.from({ length: 4 }).map((_, index) => (
                 <div key={index} className="h-28 animate-pulse rounded-md border border-slate-800 bg-slate-950" />
@@ -232,7 +202,7 @@ const DashboardPage = () => {
             <div className="rounded-md border border-slate-800 bg-slate-950 p-5">
               <div className="text-sm font-medium text-slate-200">No verified news catalyst in latest auto sweep</div>
               <p className="mt-1 text-sm text-slate-400">
-                {sentimentError || 'RSS cache has no high-value coin-linked item yet. No placeholder cards.'}
+                {overviewError || 'RSS cache has no high-value coin-linked item yet. No placeholder cards.'}
               </p>
               <span className="mt-4 inline-block text-xs text-slate-500">Auto refresh every 15m. Verified RSS only.</span>
             </div>
@@ -254,22 +224,23 @@ const DashboardPage = () => {
           <Badge className="bg-slate-800 text-cyan-200">Auto anomaly watch</Badge>
         </CardHeader>
         <CardContent>
-          {isLoading && !meaningfulAnalyses.length ? (
+          {isLoading && !scannerItems.length ? (
             <div className="grid gap-3 md:grid-cols-3">
               {Array.from({ length: 3 }).map((_, index) => (
                 <div key={index} className="h-24 animate-pulse rounded-md border border-slate-800 bg-slate-950" />
               ))}
             </div>
-          ) : meaningfulAnalyses.length ? (
+          ) : scannerItems.length ? (
             <div className="grid gap-3 md:grid-cols-3">
-              {meaningfulAnalyses.slice(0, 3).map((analysis) => (
-                <Link key={analysis.id} to={`/analysis/${analysis.symbol}`} className="rounded-md border border-slate-800 bg-slate-950 p-3 transition hover:border-cyan-500/40">
+              {scannerItems.slice(0, 6).map((item) => (
+                <Link key={item.symbol} to={`/analysis/${item.symbol}`} className="rounded-md border border-slate-800 bg-slate-950 p-3 transition hover:border-cyan-500/40">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-100">{analysis.symbol.replace('USDT', '')}</span>
-                    <Badge className="bg-slate-800 text-cyan-200">{analysis.cause_json?.confidence_score || 0}/100</Badge>
+                    <span className="font-semibold text-slate-100">{item.symbol.replace('USDT', '')}</span>
+                    <Badge className="bg-slate-800 text-cyan-200">{item.confidence}/100</Badge>
                   </div>
-                  <p className="mt-2 text-sm text-slate-400">{causeLabel(analysis.cause_json?.likely_cause)}</p>
-                  <p className="mt-1 text-xs text-slate-500">Risk {analysis.risk_json?.pump_dump_risk_score || 0}/100</p>
+                  <p className="mt-2 text-sm text-slate-400">{causeLabel(item.cause || undefined)}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatContinuationLabel(item.continuation || undefined)} / Risk {item.risk_score}/100</p>
+                  <Sparkline values={item.sparkline} positive={(item.sparkline.at(-1) || 0) >= (item.sparkline[0] || 0)} className="mt-3" />
                 </Link>
               ))}
             </div>
@@ -280,6 +251,21 @@ const DashboardPage = () => {
           )}
         </CardContent>
       </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <OverviewPanel
+          title="Top Gainers"
+          subtitle="Fast movers, enriched with cached cause context."
+          items={gainers}
+          positive
+        />
+        <OverviewPanel
+          title="Top Losers"
+          subtitle="Largest downside movers, enriched with cached cause context."
+          items={losers}
+        />
+      </div>
 
       <Card className="border-slate-800 bg-slate-900">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -372,6 +358,13 @@ const SentimentBadge = ({ label, score }: { label: string; score: number }) => (
   </Badge>
 );
 
+const formatContinuationLabel = (label?: string) => {
+  if (label === 'likely_continue') return 'Move persistence';
+  if (label === 'likely_fade') return 'Likely fade risk';
+  if (label === 'mixed') return 'Follow-through mixed';
+  return 'Follow-through pending';
+};
+
 const causeLabel = (cause?: string) => {
   const labels: Record<string, string> = {
     organic_demand: 'Organic demand',
@@ -384,5 +377,59 @@ const causeLabel = (cause?: string) => {
   };
   return labels[cause || ''] || 'Movement classified';
 };
+
+const OverviewPanel = ({
+  title,
+  subtitle,
+  items,
+  positive = false,
+}: {
+  title: string;
+  subtitle: string;
+  items: Array<{
+    symbol: string;
+    move_pct: number;
+    sparkline: number[];
+    cause: string | null;
+    continuation: string | null;
+    risk_score: number | null;
+    reason: string | null;
+  }>;
+  positive?: boolean;
+}) => (
+  <Card className="border-slate-800 bg-slate-900">
+    <CardHeader>
+      <CardTitle className="text-base">{title}</CardTitle>
+      <p className="text-sm text-slate-400">{subtitle}</p>
+    </CardHeader>
+    <CardContent>
+      {items.length ? (
+        <div className="grid gap-3">
+          {items.slice(0, 5).map((item) => (
+            <Link key={`${title}-${item.symbol}`} to={`/analysis/${item.symbol}`} className="rounded-md border border-slate-800 bg-slate-950 p-3 transition hover:border-cyan-500/40">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-semibold text-slate-100">{item.symbol.replace('USDT', '')}</div>
+                <Badge className={cn('bg-slate-800', positive ? 'text-emerald-300' : 'text-rose-300')}>
+                  {item.move_pct > 0 ? '+' : ''}{item.move_pct}%
+                </Badge>
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                <span>{causeLabel(item.cause || undefined)}</span>
+                <span>{formatContinuationLabel(item.continuation || undefined)}</span>
+              </div>
+              <p className="mt-2 line-clamp-2 text-sm text-slate-400">{item.reason || 'Cached market mover context pending.'}</p>
+              <div className="mt-2 text-xs text-slate-500">Risk {item.risk_score ?? 0}/100</div>
+              <Sparkline values={item.sparkline} positive={positive} className="mt-3" />
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-md border border-slate-800 bg-slate-950 p-4 text-sm text-slate-400">
+          No cached movers yet.
+        </div>
+      )}
+    </CardContent>
+  </Card>
+);
 
 export default DashboardPage;

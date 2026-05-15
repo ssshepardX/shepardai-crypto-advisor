@@ -98,6 +98,13 @@ export interface CauseSummary {
   risk_labels: string[];
 }
 
+export interface ContinuationSummary {
+  continuation_score_15m: number;
+  continuation_score_1h: number;
+  continuation_label: 'likely_continue' | 'mixed' | 'likely_fade';
+  continuation_reasons: string[];
+}
+
 export interface NewsSummary {
   status: string;
   source_count: number;
@@ -130,6 +137,7 @@ export interface CoinAnalysis {
   risk_json: RiskSummary;
   social_json: SocialSummary;
   cause_json?: CauseSummary;
+  continuation_json?: ContinuationSummary;
   market_microstructure_json?: MarketMicrostructure;
   news_json?: NewsSummary;
   confidence_json?: {

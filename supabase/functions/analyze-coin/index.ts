@@ -108,6 +108,13 @@ type CauseSummary = {
   risk_labels: string[];
 };
 
+type ContinuationSummary = {
+  continuation_score_15m: number;
+  continuation_score_1h: number;
+  continuation_label: "likely_continue" | "mixed" | "likely_fade";
+  continuation_reasons: string[];
+};
+
 type PlanId = "free" | "pro" | "trader";
 
 type Entitlement = {
@@ -851,8 +858,12 @@ function fallbackAiSummary(cause: CauseSummary, risk: RiskSummary, language: Out
   });
   const riskLevel = risk.pump_dump_risk_score > 70 ? "High" : risk.pump_dump_risk_score > 45 ? "Moderate" : "Low";
   const reasonText = language === "tr"
-    ? "Veriler hareketin kaynağına dair net bir baskın sinyal göstermiyor. Büyük işlem, likidite ve hacim skorları birlikte izlenmeli."
-    : "The data does not show one clear dominant cause. Large trades, liquidity, and volume scores should be read together.";
+    ? cause.confidence_score >= 58 && risk.pump_dump_risk_score < 55
+      ? "Veri seti hareket kaynagini netlestiriyor. Yakin vade devam gucu izlenebilir, fakat risk skoruyla birlikte okunmali."
+      : "Veriler hareket kaynagini gosteriyor ama devam gucu karisik. Likidite, wick yapisi ve buyuk islemler birlikte izlenmeli."
+    : cause.confidence_score >= 58 && risk.pump_dump_risk_score < 55
+      ? "The move source is fairly clear. Near-term follow-through can be tracked, but it should still be read with risk context."
+      : "The move source is visible, but follow-through is mixed. Liquidity, wick structure, and large trades should be read together.";
   const notice = language === "tr"
     ? "Bu finansal tavsiye değildir; yalnızca piyasa hareketi kaynak analizidir."
     : "This is not financial advice. It is only a market movement source analysis.";
@@ -891,6 +902,7 @@ async function getAiSummary(
   indicators: IndicatorSummary,
   risk: RiskSummary,
   cause: CauseSummary,
+  continuation: ContinuationSummary,
   microstructure: Record<string, unknown>,
   social: Record<string, unknown>,
   news: Record<string, unknown>,
@@ -909,6 +921,8 @@ async function getAiSummary(
       confidence: cause.confidence_score,
       earlyWarning: cause.early_warning_score,
       manipulation: risk.pump_dump_risk_score,
+      continuation15m: continuation.continuation_score_15m,
+      continuation1h: continuation.continuation_score_1h,
     },
     indicators: {
       vwap: indicators.vwap,
@@ -922,12 +936,13 @@ async function getAiSummary(
     },
     microstructure,
     labels: cause.risk_labels,
+    continuation,
     social,
     news,
   };
 
   const targetLanguage = language === "tr" ? "Turkish" : "English";
-  const prompt = `Write a short and plain market movement source analysis. Output language must be ${targetLanguage} (${language}). Audience: a regular app user, not a professional trader. Use simple words. Do not mention model/provider/cache/fallback. Do not write price direction, buy/sell, entry/exit, or certainty. Decisions already come from deterministic scores; explain them only. Return JSON only. Every human-readable field must be in ${targetLanguage}.\n${JSON.stringify(compactPayload)}\nOutput schema: {"likely_cause":"organic_demand|whale_push|thin_liquidity_move|fomo_trap|fraud_pump_risk|news_social_catalyst|balanced_market","manipulation_risk":"Low|Moderate|High|Critical","whale_probability":0-100,"catalyst_summary":"max 2 short sentences","confidence":0-100,"watch_points":["max 3 short items"],"not_advice_notice":"one short disclaimer in target language"}`;
+  const prompt = `Write a short and plain market movement source analysis. Output language must be ${targetLanguage} (${language}). Audience: a regular app user, not a professional trader. Use simple words. Do not mention model/provider/cache/fallback. Do not write buy/sell, entry/exit, or certainty. You may describe whether near-term follow-through looks stronger, mixed, or fading. Decisions already come from deterministic scores; explain them only. Return JSON only. Every human-readable field must be in ${targetLanguage}.\n${JSON.stringify(compactPayload)}\nOutput schema: {"likely_cause":"organic_demand|whale_push|thin_liquidity_move|fomo_trap|fraud_pump_risk|news_social_catalyst|balanced_market","manipulation_risk":"Low|Moderate|High|Critical","whale_probability":0-100,"catalyst_summary":"max 2 short sentences including cause and move persistence","confidence":0-100,"watch_points":["max 3 short items"],"not_advice_notice":"one short disclaimer in target language"}`;
   logAnalysisEvent("ai_summary_prompt", {
     symbol,
     timeframe,
@@ -1070,6 +1085,42 @@ function riskBucket(score: number) {
   return "low";
 }
 
+function calculateContinuation(indicators: IndicatorSummary, risk: RiskSummary, cause: CauseSummary, trades: TradeSummary): ContinuationSummary {
+  const directionalPressure = Math.abs(indicators.takerBuyRatio - 0.5) * 200;
+  const supportiveFlow = clamp(
+    Math.max(0, indicators.volumeZScore) * 14 +
+    Math.max(0, indicators.candleExpansion - 1) * 20 +
+    Math.max(0, Math.abs(indicators.vwapDistancePct) - 0.25) * 18 +
+    (indicators.rangeBreakout ? 18 : 0) +
+    directionalPressure * 0.18 +
+    Math.max(trades.buyPressurePct, trades.sellPressurePct) * 0.16
+  );
+  const fadeRisk = clamp(
+    risk.reversal_risk_score * 0.42 +
+    risk.pump_dump_risk_score * 0.28 +
+    (risk.orderbook.isThin ? 16 : 0) +
+    Math.max(indicators.upperWickPct, indicators.lowerWickPct) * 0.22
+  );
+  const continuation15m = clamp(50 + supportiveFlow * 0.45 - fadeRisk * 0.4 + cause.confidence_score * 0.1);
+  const continuation1h = clamp(50 + supportiveFlow * 0.35 - fadeRisk * 0.32 + cause.movement_cause_score.organic * 0.08 + cause.movement_cause_score.news_social * 0.06);
+  const reasons: string[] = [];
+  if (indicators.rangeBreakout) reasons.push("range_breakout_active");
+  if (indicators.volumeZScore >= 1.5) reasons.push("volume_confirmation");
+  if (Math.abs(indicators.vwapDistancePct) >= 0.8) reasons.push("vwap_extension");
+  if (directionalPressure >= 16) reasons.push("taker_pressure");
+  if (risk.orderbook.isThin) reasons.push("thin_orderbook");
+  if (risk.pump_dump_risk_score >= 55) reasons.push("manipulation_risk");
+  if (Math.max(indicators.upperWickPct, indicators.lowerWickPct) >= 35) reasons.push("wick_rejection");
+  const blended = (continuation15m * 0.6) + (continuation1h * 0.4);
+  const label = blended >= 62 ? "likely_continue" : blended <= 44 ? "likely_fade" : "mixed";
+  return {
+    continuation_score_15m: round(continuation15m, 0),
+    continuation_score_1h: round(continuation1h, 0),
+    continuation_label: label,
+    continuation_reasons: reasons.slice(0, 4),
+  };
+}
+
 async function readSemanticAiSummary(
   symbol: string,
   timeframe: Timeframe,
@@ -1166,6 +1217,7 @@ async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: Au
     candle_expansion: indicators.candleExpansion,
   };
   const cause = calculateCause(indicators, risk, orderbook, trades, social, news);
+  const continuation = calculateContinuation(indicators, risk, cause, trades);
   const confidence = {
     confidence_score: cause.confidence_score,
     data_quality: {
@@ -1184,7 +1236,7 @@ async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: Au
   if (!recentAiSummary) {
     await assertCanGenerateAi(auth);
   }
-  const aiSummary = recentAiSummary || await getAiSummary(symbol, timeframe, price, indicators, risk, cause, microstructure, social, news, language);
+  const aiSummary = recentAiSummary || await getAiSummary(symbol, timeframe, price, indicators, risk, cause, continuation, microstructure, social, news, language);
   if (!recentAiSummary) {
     await incrementUsage(auth.userId, "ai_analysis_count");
   }
@@ -1196,6 +1248,7 @@ async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: Au
     indicator_json: indicators,
     risk_json: risk,
     social_json: social,
+    continuation_json: continuation,
     ai_summary_json: aiSummary,
     expires_at: expiresAt,
   };
@@ -1204,6 +1257,7 @@ async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: Au
     .insert({
       ...baseInsert,
       cause_json: cause,
+      continuation_json: continuation,
       market_microstructure_json: microstructure,
       news_json: news,
       confidence_json: confidence,
@@ -1212,7 +1266,7 @@ async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: Au
     .single();
 
   if (error) {
-    const missingNewColumns = ["cause_json", "market_microstructure_json", "news_json", "confidence_json"]
+    const missingNewColumns = ["cause_json", "market_microstructure_json", "news_json", "confidence_json", "continuation_json"]
       .some((column) => error.message.includes(column));
     if (!missingNewColumns) throw new Error(error.message);
 
@@ -1225,6 +1279,7 @@ async function analyzeCoin(symbolInput: string, timeframeInput: string, auth: Au
     return {
       ...fallbackData,
       cause_json: cause,
+      continuation_json: continuation,
       market_microstructure_json: microstructure,
       news_json: news,
       confidence_json: confidence,
